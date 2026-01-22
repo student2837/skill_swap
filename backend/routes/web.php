@@ -1,0 +1,80 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+// Public routes
+Route::get('/', function () {
+    return view('index');
+})->name('index');
+
+Route::get('/login', function () {
+    return view('login');
+})->name('login');
+
+Route::get('/register', function () {
+    return view('register');
+})->name('register');
+
+Route::get('/browse', function () {
+    return view('browse');
+})->name('browse');
+
+// Protected routes (authentication handled client-side via API tokens)
+// Note: These routes don't use auth:sanctum middleware because the frontend
+// uses Bearer token authentication via API, not session-based auth
+Route::get('/dashboard', function () {
+    return view('dashboard');
+})->name('dashboard');
+
+Route::get('/my-skills', function () {
+    return view('my-skills');
+})->name('my-skills');
+
+Route::get('/add-skill', function () {
+    return view('add-skill');
+})->name('add-skill');
+
+Route::get('/edit-skill', function () {
+    return view('edit-skill');
+})->name('edit-skill');
+
+Route::get('/requests', function () {
+    return view('requests');
+})->name('requests');
+
+Route::get('/messages', function () {
+    return view('messages');
+})->name('messages');
+
+Route::get('/favorites', function () {
+    return view('favorites');
+})->name('favorites');
+
+Route::get('/review', function () {
+    return view('review');
+})->name('review');
+
+Route::get('/credits', function () {
+    return view('credits');
+})->name('credits');
+
+Route::get('/profile', function () {
+    return view('profile');
+})->name('profile');
+
+Route::get('/skill-details', function () {
+    return view('skill-details');
+})->name('skill-details');
+
+Route::get('/session-details', function () {
+    return view('session-details');
+})->name('session-details');
+
+Route::get('/request-session', function () {
+    return view('request-session');
+})->name('request-session');
+
+// Admin routes (authentication handled client-side)
+Route::get('/admin/dashboard', function () {
+    return view('admin-dashboard');
+})->name('admin.dashboard');
