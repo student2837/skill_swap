@@ -5,7 +5,14 @@
 
 // Global token expiration handler
 // This listens for token expiration events from the API client and redirects to login
+// Only handle if not already on login/register pages
+let isLoggingOut = false;
 window.addEventListener('tokenExpired', function(event) {
+    // Don't show alert if user is intentionally logging out
+    if (isLoggingOut) {
+        return;
+    }
+    
     console.warn('Token expired:', event.detail.message);
     
     // Clear all auth-related data
@@ -14,13 +21,18 @@ window.addEventListener('tokenExpired', function(event) {
     localStorage.removeItem('user');
     sessionStorage.clear();
     
-    // Show a message to the user
-    alert('Your session has expired. Please log in again.');
+    // Only show alert and redirect if not already on auth pages
+    const currentPath = window.location.pathname;
+    const isAuthPage = currentPath.includes('/login') || currentPath.includes('/register') || 
+                       currentPath === '/' || currentPath === '';
     
-    // Redirect to login page (or register for new users)
-    if (window.location.pathname !== '/login.html' && !window.location.pathname.includes('login.html') &&
-        window.location.pathname !== '/register.html' && !window.location.pathname.includes('register.html')) {
-        window.location.href = 'register.html';
+    if (!isAuthPage) {
+        // Show a message to the user
+        alert('Your session has expired. Please log in again.');
+        
+        // Redirect to login page using current origin
+        const loginUrl = window.location.origin + '/login';
+        window.location.href = loginUrl;
     }
 });
 
@@ -79,23 +91,32 @@ document.addEventListener('DOMContentLoaded', function() {
         element.addEventListener('click', async function(e) {
             e.preventDefault();
             
-            // Clear all auth data
+            // Set flag to prevent tokenExpired event from showing alert
+            isLoggingOut = true;
+            
+            // Clear all auth data first
             localStorage.removeItem('auth_token');
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             sessionStorage.clear();
             
             // Try to call logout API if API client is available
+            // Suppress errors since we're logging out anyway
             if (typeof ApiClient !== 'undefined' && window.apiClient) {
                 try {
-                    await window.apiClient.logout();
+                    // Temporarily remove token to prevent 401 errors
+                    const tempToken = window.apiClient.token;
+                    window.apiClient.token = null;
+                    await window.apiClient.post('/logout');
                 } catch (err) {
-                    console.error('Logout API error:', err);
+                    // Ignore errors during logout - token might already be expired
+                    console.log('Logout API call completed (errors ignored during logout)');
                 }
             }
             
-            // Redirect to login/register
-            window.location.href = 'register.html';
+            // Redirect to login page using current origin
+            const loginUrl = window.location.origin + '/login';
+            window.location.href = loginUrl;
         });
     });
 });

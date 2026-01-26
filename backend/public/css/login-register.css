@@ -140,7 +140,8 @@ body {
 }
 
 .forgot-link:hover {
-  text-decoration: underline;
+  color: #60a5fa;
+  filter: brightness(1.2);
 }
 
 /* Button */
@@ -179,5 +180,6 @@ body {
 }
 
 .auth-switch a:hover {
-  text-decoration: underline;
+  color: #a5b4fc;
+  filter: brightness(1.2);
 }

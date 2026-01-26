@@ -4,12 +4,73 @@
 
 @push('styles')
   <link rel="stylesheet" href="{{ asset('css/dashboard.css') }}" />
+  <style>
+    /* Credits page: full-screen transactions viewer */
+    .tx-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(2, 6, 23, 0.92);
+      backdrop-filter: blur(10px);
+      display: none;
+    }
+    .tx-overlay-inner {
+      height: 100%;
+      padding: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .tx-overlay-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.9rem 1.2rem;
+      border-radius: var(--radius);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.72);
+    }
+    .tx-back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.85);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, background 0.2s ease;
+    }
+    .tx-back-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35);
+      filter: brightness(1.12);
+    }
+    .tx-overlay-table {
+      flex: 1;
+      overflow: hidden;
+      border-radius: var(--radius);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.72);
+    }
+    .tx-overlay-table .table-wrapper {
+      margin-top: 0;
+      height: 100%;
+      overflow: auto;
+      border-radius: 0;
+    }
+  </style>
 @endpush
 
 @section('content')
   <div class="dashboard-bg"></div>
 
-  @include('components.sidebar')
+  @include('components.user-sidebar')
+  @include('components.admin-sidebar')
+  @include('components.sidebar-init')
 
   <!-- Main -->
   <main class="main-content">
@@ -57,13 +118,10 @@
     <!-- Transactions -->
     <section class="dash-card-full glass">
       <div class="dash-card-header">
-        <h3>Recent transactions</h3>
+        <h3 id="transactionsTitle">Recent transactions</h3>
 
-        <button
-          class="btn-small js-show-toast"
-          data-toast-message="Full transaction history (demo)."
-        >
-          View all
+        <button id="viewAllTransactionsBtn" class="btn-small" type="button">
+          View all transactions
         </button>
       </div>
 
@@ -84,6 +142,36 @@
         </table>
       </div>
     </section>
+
+    <!-- Full-screen: All transactions -->
+    <div id="transactionsOverlay" class="tx-overlay" aria-hidden="true">
+      <div class="tx-overlay-inner">
+        <div class="tx-overlay-header">
+          <button id="closeTransactionsOverlayBtn" class="tx-back-btn" type="button">← Back</button>
+          <h3 style="margin:0; font-size: 1.05rem;">All transactions</h3>
+          <div style="width: 90px;"></div>
+        </div>
+
+        <div class="tx-overlay-table">
+          <div class="table-wrapper">
+            <table class="request-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Details</th>
+                  <th>Amount</th>
+                  <th>Balance</th>
+                </tr>
+              </thead>
+              <tbody id="allTransactionsBody">
+                <tr><td colspan="5">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 @endsection
 
@@ -140,6 +228,90 @@
       return '—';
     }
 
+    const RECENT_TX_LIMIT = 5;
+    let allTransactions = [];
+
+    function renderTransactions() {
+      const tbody = document.getElementById("transactionsBody");
+      const titleEl = document.getElementById("transactionsTitle");
+      const btn = document.getElementById("viewAllTransactionsBtn");
+
+      if (!tbody) return;
+      tbody.innerHTML = "";
+
+      // Always show latest 5 in the main table
+      const rows = allTransactions.slice(0, RECENT_TX_LIMIT);
+
+      if (!rows.length) {
+        tbody.innerHTML = "<tr><td colspan='5'>No transactions yet</td></tr>";
+        if (titleEl) titleEl.textContent = "Recent transactions";
+        return;
+      }
+
+      rows.forEach(transaction => {
+        const row = document.createElement('tr');
+        const isPositive = transaction.type === 'skill_earning' || transaction.type === 'credit_purchase';
+        const amountClass = isPositive ? 'tx-pos' : 'tx-neg';
+        const amountSign = isPositive ? '+' : '-';
+
+        row.innerHTML = `
+          <td>${formatDate(transaction.created_at)}</td>
+          <td>${formatTransactionType(transaction.type)}</td>
+          <td>${formatTransactionDetails(transaction)}</td>
+          <td class="${amountClass}">${amountSign}${transaction.amount}</td>
+          <td>${transaction.balance ?? '—'}</td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      if (titleEl) titleEl.textContent = "Recent transactions";
+      if (btn) btn.style.display = '';
+    }
+
+    function renderAllTransactions() {
+      const tbody = document.getElementById("allTransactionsBody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+
+      if (!allTransactions.length) {
+        tbody.innerHTML = "<tr><td colspan='5'>No transactions yet</td></tr>";
+        return;
+      }
+
+      allTransactions.forEach(transaction => {
+        const row = document.createElement('tr');
+        const isPositive = transaction.type === 'skill_earning' || transaction.type === 'credit_purchase';
+        const amountClass = isPositive ? 'tx-pos' : 'tx-neg';
+        const amountSign = isPositive ? '+' : '-';
+
+        row.innerHTML = `
+          <td>${formatDate(transaction.created_at)}</td>
+          <td>${formatTransactionType(transaction.type)}</td>
+          <td>${formatTransactionDetails(transaction)}</td>
+          <td class="${amountClass}">${amountSign}${transaction.amount}</td>
+          <td>${transaction.balance ?? '—'}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function openTransactionsOverlay() {
+      const overlay = document.getElementById('transactionsOverlay');
+      if (!overlay) return;
+      overlay.style.display = 'block';
+      overlay.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      renderAllTransactions();
+    }
+
+    function closeTransactionsOverlay() {
+      const overlay = document.getElementById('transactionsOverlay');
+      if (!overlay) return;
+      overlay.style.display = 'none';
+      overlay.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+
     async function loadCreditsData() {
       try {
         const data = await apiClient.getUserTransactions();
@@ -150,30 +322,10 @@
         document.getElementById("taughtThisMonth").textContent = data.taught_this_month > 0 ? `+${data.taught_this_month}` : '0';
         document.getElementById("learnedThisMonth").textContent = data.learned_this_month > 0 ? `-${data.learned_this_month}` : '0';
 
-        // Update transactions table
-        const tbody = document.getElementById("transactionsBody");
-        tbody.innerHTML = "";
-
-        if (!data.transactions || !data.transactions.length) {
-          tbody.innerHTML = "<tr><td colspan='5'>No transactions yet</td></tr>";
-          return;
-        }
-
-        data.transactions.forEach(transaction => {
-          const row = document.createElement('tr');
-          const isPositive = transaction.type === 'skill_earning' || transaction.type === 'credit_purchase';
-          const amountClass = isPositive ? 'tx-pos' : 'tx-neg';
-          const amountSign = isPositive ? '+' : '-';
-          
-          row.innerHTML = `
-            <td>${formatDate(transaction.created_at)}</td>
-            <td>${formatTransactionType(transaction.type)}</td>
-            <td>${formatTransactionDetails(transaction)}</td>
-            <td class="${amountClass}">${amountSign}${transaction.amount}</td>
-            <td>${transaction.balance || '—'}</td>
-          `;
-          tbody.appendChild(row);
-        });
+        // Store all transactions and render (recent by default)
+        allTransactions = Array.isArray(data.transactions) ? data.transactions : [];
+        renderTransactions();
+        renderAllTransactions();
       } catch (err) {
         console.error("Error loading credits data:", err);
         document.getElementById("transactionsBody").innerHTML = "<tr><td colspan='5'>Error loading transactions</td></tr>";
@@ -234,6 +386,20 @@
     const urlParams = new URLSearchParams(window.location.search);
     const shouldBuy = urlParams.get('buy');
     const amountParam = urlParams.get('amount');
+
+    document.getElementById('viewAllTransactionsBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      openTransactionsOverlay();
+    });
+    document.getElementById('closeTransactionsOverlayBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeTransactionsOverlay();
+    });
+    document.getElementById('transactionsOverlay')?.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'transactionsOverlay') {
+        closeTransactionsOverlay();
+      }
+    });
 
     loadCreditsData().then(() => {
       // If buy parameter is present, open the buy credits dialog

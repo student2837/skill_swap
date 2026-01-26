@@ -9,7 +9,9 @@
 @section('content')
   <div class="dashboard-bg"></div>
 
-  @include('components.sidebar')
+  @include('components.user-sidebar')
+  @include('components.admin-sidebar')
+  @include('components.sidebar-init')
 
   <!-- Main -->
   <main class="main-content">
@@ -37,12 +39,7 @@
         <label>
           <span>Category</span>
           <select id="skillCategory" required>
-            <option value="">Select a category</option>
-            <option value="programming">Programming</option>
-            <option value="design">Design</option>
-            <option value="music">Music</option>
-            <option value="languages">Languages</option>
-            <option value="other">Other</option>
+            <option value="">Loading categories...</option>
           </select>
         </label>
 
@@ -121,6 +118,25 @@
       window.location.href = "{{ route('my-skills') }}";
     }
 
+    // Load categories dynamically
+    async function loadCategories() {
+      try {
+        const categories = await apiClient.listCategories();
+        const categorySelect = document.getElementById('skillCategory');
+        
+        if (categories.length === 0) {
+          categorySelect.innerHTML = '<option value="">No categories available</option>';
+          return;
+        }
+        
+        categorySelect.innerHTML = '<option value="">Select a category</option>' +
+          categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
+      } catch (err) {
+        console.error('Error loading categories:', err);
+        document.getElementById('skillCategory').innerHTML = '<option value="">Error loading categories</option>';
+      }
+    }
+
     // Load skill data
     async function loadSkill() {
       try {
@@ -140,9 +156,16 @@
         document.getElementById("skillShortDesc").value = skill.shortDesc || '';
         document.getElementById("skillLearn").value = skill.what_youll_learn || skill.whatYoullLearn || '';
 
-        // Set category (use the category field from skill, which is an enum)
-        if (skill.category) {
-          document.getElementById("skillCategory").value = skill.category.toLowerCase();
+        // Set category (use categories relationship)
+        if (skill.categories && skill.categories.length > 0) {
+          document.getElementById("skillCategory").value = skill.categories[0].id;
+        } else if (skill.category) {
+          // Fallback: try to find category by name for backward compatibility
+          const categories = await apiClient.listCategories();
+          const matchingCat = categories.find(c => c.name.toLowerCase() === skill.category.toLowerCase());
+          if (matchingCat) {
+            document.getElementById("skillCategory").value = matchingCat.id;
+          }
         }
 
         // Set lesson type checkboxes
@@ -162,7 +185,7 @@
       e.preventDefault();
 
       const title = document.getElementById("skillTitle").value.trim();
-      const category = document.getElementById("skillCategory").value.toLowerCase().trim();
+      const categoryId = parseInt(document.getElementById("skillCategory").value);
       const price = parseInt(document.getElementById("skillPrice").value);
       const shortDesc = document.getElementById("skillShortDesc").value.trim();
       const description = document.getElementById("skillDescription").value.trim();
@@ -217,7 +240,7 @@
       try {
         const skillData = {
           title: title,
-          category: category,
+          category_id: categoryId,
           description: description,
           price: price,
           lesson_type: lessonType
@@ -241,6 +264,9 @@
       }
     });
 
-    loadSkill();
+    // Load categories first, then load skill
+    loadCategories().then(() => {
+      loadSkill();
+    });
   </script>
 @endpush

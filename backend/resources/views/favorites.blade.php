@@ -4,12 +4,23 @@
 
 @push('styles')
   <link rel="stylesheet" href="{{ asset('css/dashboard.css') }}" />
+  <link rel="stylesheet" href="{{ asset('css/styles.css') }}" />
+  <style>
+    .remove-favorite-btn:hover {
+      background: linear-gradient(120deg, #b91c1c, #dc2626) !important;
+      box-shadow: 0 6px 16px rgba(220, 38, 38, 0.6) !important;
+      transform: translateY(-1px);
+      filter: brightness(1.1);
+    }
+  </style>
 @endpush
 
 @section('content')
   <div class="dashboard-bg"></div>
 
-  @include('components.sidebar')
+  @include('components.user-sidebar')
+  @include('components.admin-sidebar')
+  @include('components.sidebar-init')
 
   <!-- Main -->
   <main class="main-content">
@@ -22,13 +33,15 @@
       </div>
     </header>
 
-    <section class="dash-card-full glass">
-      <div class="dash-card-header">
+    <section class="dash-card-full glass" style="padding: 0; overflow: visible; width: 100%;">
+      <div class="dash-card-header" style="padding: 1.5rem 2rem;">
         <h3>Your favorite skills</h3>
       </div>
 
-      <div class="favorites-grid">
-        <!-- Favorite cards will be rendered by backend later -->
+      <div style="width: 100%; padding: 2rem; box-sizing: border-box;">
+        <div class="skills-grid" id="favoritesGrid" style="width: 100%; margin: 0;">
+          <!-- Favorite cards will be rendered by backend later -->
+        </div>
       </div>
     </section>
   </main>
@@ -62,14 +75,18 @@
 
     // Load favorites
     async function loadFavorites() {
-      const favoritesGrid = document.querySelector('.favorites-grid');
-      favoritesGrid.innerHTML = '<p>Loading favorites...</p>';
+      const favoritesGrid = document.getElementById('favoritesGrid');
+      if (!favoritesGrid) {
+        console.error('Favorites grid element not found');
+        return;
+      }
+      favoritesGrid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 3rem 1rem;">Loading favorites...</p>';
 
       try {
         const favorites = await apiClient.listFavorites();
         
         if (!favorites || favorites.length === 0) {
-          favoritesGrid.innerHTML = '<p>No favorites yet. Start browsing skills to add some!</p>';
+          favoritesGrid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 3rem 1rem;">No favorites yet. Start browsing skills to add some!</p>';
           return;
         }
 
@@ -79,36 +96,29 @@
             return ''; // Skip if no skill associated
           }
 
-          // Format category
-          const category = skill.category ? skill.category.charAt(0).toUpperCase() + skill.category.slice(1) : 'Other';
-          
           // Get rating
-          const rating = skill.rating_avg ? skill.rating_avg.toFixed(1) : (skill.user?.rating_avg ? skill.user.rating_avg.toFixed(1) : 'N/A');
-          
-          // Truncate long titles
+          const rating = skill.rating_avg ? skill.rating_avg.toFixed(1) : 'N/A';
           const title = skill.title || 'Untitled';
-          const truncatedTitle = title.length > 40 ? title.substring(0, 40) + '...' : title;
-          
-          // Truncate teacher name if needed
           const teacherName = skill.user?.name || 'Unknown teacher';
-          const truncatedTeacher = teacherName.length > 25 ? teacherName.substring(0, 25) + '...' : teacherName;
+          const price = skill.price || 0;
+          const shortDesc = skill.shortDesc || skill.description || 'No description available.';
 
           return `
-            <div class="favorite-card">
-              <div class="fav-card-content">
-                <div class="fav-category">${category}</div>
-                <h3 class="fav-title" title="${title}">${truncatedTitle}</h3>
-                <p class="fav-meta">${truncatedTeacher} • ${skill.price || 0} credits</p>
-                <div class="fav-rating">
-                  <span class="rating-star">★</span>
-                  <span class="rating-value">${rating}</span>
-                </div>
+            <div class="skill-card glass">
+              <div class="skill-card-header">
+                <h3>${title}</h3>
+                <span class="chip chip-soft">${price} credits</span>
               </div>
-              <div class="fav-card-footer">
-                <a href="{{ route('skill-details') }}?id=${skill.id}" class="fav-btn-view">View</a>
-                <button class="fav-btn-remove remove-favorite-btn" data-favorite-id="${favorite.id}" data-skill-id="${skill.id}">
-                  Remove
-                </button>
+              <p class="skill-card-teacher">${teacherName}</p>
+              <p class="skill-card-desc">${shortDesc}</p>
+              <div class="skill-card-footer">
+                <span class="rating">★ ${rating}</span>
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
+                  <a href="{{ route('skill-details') }}?id=${skill.id}" class="btn btn-sm btn-primary">View Details</a>
+                  <button class="btn btn-sm btn-danger remove-favorite-btn" data-favorite-id="${favorite.id}" data-skill-id="${skill.id}" style="background: linear-gradient(120deg, #dc2626, #ef4444); color: #fff; border: none; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4); border-radius: 999px; cursor: pointer; transition: all 0.2s ease;">
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>
           `;
@@ -118,7 +128,12 @@
         document.querySelectorAll('.remove-favorite-btn').forEach(btn => {
           btn.addEventListener('click', async (e) => {
             e.preventDefault();
-            const skillId = e.target.getAttribute('data-skill-id');
+            e.stopPropagation();
+            const skillId = btn.getAttribute('data-skill-id');
+            
+            if (!confirm('Are you sure you want to remove this skill from your favorites?')) {
+              return;
+            }
             
             try {
               await apiClient.removeFavorite({ skill_id: parseInt(skillId) });
@@ -135,7 +150,10 @@
 
       } catch (err) {
         console.error('Error loading favorites:', err);
-        favoritesGrid.innerHTML = '<p>Error loading favorites. Please try again.</p>';
+        const favoritesGrid = document.getElementById('favoritesGrid');
+        if (favoritesGrid) {
+          favoritesGrid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 3rem 1rem;">Error loading favorites. Please try again.</p>';
+        }
       }
     }
 

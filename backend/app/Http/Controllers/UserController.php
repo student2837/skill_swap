@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Exception;
 use App\Models\Skill;
+use App\Models\SkillRequest;
 
 
 class UserController extends Controller
@@ -133,7 +134,16 @@ class UserController extends Controller
                 return response()->json(['error' => 'Unauthorized. Admin access required.'], 403);
             }
 
-            $users = User::select('id', 'name', 'email', 'bio', 'credits', 'rating_avg', 'is_admin', 'created_at')
+            $users = User::query()
+                ->select('users.id', 'users.name', 'users.email', 'users.bio', 'users.credits', 'users.rating_avg', 'users.is_admin', 'users.is_verified', 'users.created_at')
+                ->withCount('skills')
+                ->selectSub(function ($q) {
+                    $q->from('requests')
+                        ->join('skills', 'requests.skill_id', '=', 'skills.id')
+                        ->whereColumn('skills.user_id', 'users.id')
+                        ->whereIn('requests.status', ['accepted', 'completed'])
+                        ->selectRaw('COUNT(DISTINCT requests.student_id)');
+                }, 'students_taught_count')
                 ->latest()
                 ->get();
 
@@ -143,6 +153,94 @@ class UserController extends Controller
 
         } catch (Exception $e) {
             return response()->json(['error' => 'Something went wrong'], 500);
+        }
+    }
+
+    /**
+     * Admin: Set user verification (blue tick)
+     */
+    public function setUserVerified(Request $request, $id)
+    {
+        try {
+            $admin = Auth::user();
+            if (!$admin || !$admin->is_admin) {
+                return response()->json(['error' => 'Unauthorized. Admin access required.'], 403);
+            }
+
+            $request->validate([
+                'is_verified' => 'required|boolean',
+            ]);
+
+            $user = User::findOrFail($id);
+            $user->is_verified = (bool) $request->is_verified;
+            $user->save();
+
+            return response()->json([
+                'message' => 'User verification updated',
+                'user' => $user->only(['id', 'name', 'email', 'is_admin', 'is_verified'])
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'User not found'], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Something went wrong: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Change user password
+     */
+    public function changePassword(Request $request)
+    {
+        try {
+            $request->validate([
+                'current_password' => 'required',
+                'new_password' => 'required|min:8',
+            ]);
+
+            $user = Auth::user();
+
+            // Verify current password
+            if (!Hash::check($request->current_password, $user->password)) {
+                return response()->json(['error' => 'Current password is incorrect'], 400);
+            }
+
+            // Update password
+            $user->password = Hash::make($request->new_password);
+            $user->save();
+
+            return response()->json([
+                'message' => 'Password changed successfully'
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Something went wrong: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Delete own account
+     */
+    public function deleteOwnAccount(Request $request)
+    {
+        try {
+            $user = Auth::user();
+
+            // Delete all user's tokens
+            $user->tokens()->delete();
+
+            // Delete the user
+            $user->delete();
+
+            return response()->json([
+                'message' => 'Account deleted successfully'
+            ], 200);
+
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Something went wrong: ' . $e->getMessage()], 500);
         }
     }
 

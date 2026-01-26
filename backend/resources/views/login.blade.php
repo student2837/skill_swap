@@ -1,4 +1,4 @@
-@extends('layouts.app')
+{{-- @extends('layouts.app')
 
 @section('title', 'Login – SkillSwap')
 
@@ -71,12 +71,12 @@
         const email = document.getElementById("email").value.trim();
         const password = document.getElementById("password").value.trim();
         const submitBtn = form.querySelector('button[type="submit"]');
-        
+
         if (!email || !password) {
           alert("Please enter both email and password");
           return;
         }
-        
+
         // Disable button during login
         submitBtn.disabled = true;
         submitBtn.textContent = 'Logging in...';
@@ -127,4 +127,117 @@
       });
     });
   </script>
+@endpush
+ --}}
+
+
+
+
+
+
+
+
+
+
+
+
+@extends('layouts.app')
+
+@section('title', 'Login – SkillSwap')
+
+@push('styles')
+<link rel="stylesheet" href="{{ asset('css/auth.css') }}">
+@endpush
+
+@section('body-class', 'auth-body')
+
+@section('content')
+<div class="auth-bg"></div>
+
+<div class="auth-card glass">
+  <a href="{{ route('index') }}" class="auth-back" aria-label="Back to home">←</a>
+  <img
+    src="{{ asset('assets/logo.png') }}"
+    alt="SkillSwap Logo"
+    class="auth-logo"
+  />
+
+  <h2>Welcome back</h2>
+  <p class="auth-sub">
+    Log in to continue learning & teaching.
+  </p>
+
+  <!-- HARD-BLOCKED FORM (NO 404 EVER) -->
+  <form id="loginForm" class="auth-form" onsubmit="return false;">
+    <label class="input-group">
+      <span>Email</span>
+      <input
+        type="email"
+        id="email"
+        placeholder="you@example.com"
+        required
+      />
+    </label>
+
+    <label class="input-group">
+      <span>Password</span>
+      <input
+        type="password"
+        id="password"
+        placeholder="••••••••"
+        required
+      />
+    </label>
+
+    <button type="button" id="loginBtn" class="auth-btn">
+      Log in
+    </button>
+  </form>
+
+  <p class="auth-switch">
+    Don't have an account?
+    <a href="{{ route('register') }}">Register now</a>
+  </p>
+</div>
+@endsection
+
+@push('scripts')
+<script src="{{ asset('js/api-client.js') }}"></script>
+
+<script>
+/* BLOCK ENTER KEY COMPLETELY */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    return false;
+  }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const loginBtn = document.getElementById("loginBtn");
+  const apiClient = new ApiClient("{{ url('/api') }}");
+
+  loginBtn.addEventListener("click", async () => {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value.trim();
+
+    if (!email || !password) {
+      alert("Please enter both email and password");
+      return;
+    }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = "Logging in...";
+
+    try {
+      await apiClient.login(email, password);
+      window.location.replace("{{ route('dashboard') }}");
+    } catch (err) {
+      alert("Wrong email or password");
+      loginBtn.disabled = false;
+      loginBtn.textContent = "Log in";
+    }
+  });
+});
+</script>
 @endpush

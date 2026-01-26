@@ -78,8 +78,7 @@
             </a>
 
             <button
-              class="btn btn-ghost js-show-toast"
-              data-toast-message="Added to favorites."
+              class="btn btn-favorite"
               id="addFavoriteBtn"
             >
               Add to Favorites
@@ -98,11 +97,11 @@
         <!-- Sidebar -->
         <aside class="skill-side">
           <div class="side-card" id="bookingCard" style="display: none;">
-            <h3>Book this skill</h3>
+            <h3 id="bookingCardTitle">Book this skill</h3>
             <p class="side-text" style="margin-bottom: 1rem;">
               Skill rate: <strong id="bookingSkillPrice">Loading...</strong>
             </p>
-            <p class="side-text" style="margin-bottom: 1rem;">
+            <p class="side-text" id="bookingUserBalanceRow" style="margin-bottom: 1rem;">
               Your balance: <strong id="bookingUserCredits">Loading...</strong>
             </p>
             <div style="display: flex; flex-direction: column; gap: 0.5rem;">
@@ -113,6 +112,7 @@
               >
                 Book Now
               </button>
+              <p id="bookingStatusNote" class="side-text" style="display:none; margin: 0.25rem 0 0.5rem; opacity: 0.9;"></p>
               <button
                 class="btn btn-secondary"
                 id="buyCreditsBtn"
@@ -171,8 +171,29 @@
       }
     }
 
+    // Skill Details requirement: show navbar only when logged out
+    async function updateNavbarVisibility() {
+      const header = document.querySelector('.site-header');
+      if (!header) return;
+
+      // Default: visible when logged out
+      if (!apiClient.isAuthenticated()) {
+        header.style.display = '';
+        return;
+      }
+
+      // If token is invalid/expired, treat as logged out
+      try {
+        await apiClient.getUser();
+        header.style.display = 'none';
+      } catch (err) {
+        header.style.display = '';
+      }
+    }
+
     // Update navigation on page load
     updateNavigation();
+    updateNavbarVisibility();
 
     // Get skill ID from URL
     const urlParams = new URLSearchParams(window.location.search);
@@ -355,6 +376,7 @@
           const bookingCard = document.getElementById('bookingCard');
           const bookNowBtn = document.getElementById('bookNowBtn');
           const buyCreditsBtn = document.getElementById('buyCreditsBtn');
+          const bookingStatusNote = document.getElementById('bookingStatusNote');
 
           if (isAuthenticated && currentUser) {
             const teacherId = skill.user_id || skill.user?.id;
@@ -366,9 +388,35 @@
               const skillPrice = skill.price || 0;
               document.getElementById('bookingSkillPrice').textContent = `${skillPrice} credits`;
               document.getElementById('bookingUserCredits').textContent = `${currentUser.credits || 0} credits`;
+              if (bookingStatusNote) bookingStatusNote.style.display = 'none';
 
-              bookNowBtn.onclick = async (e) => {
+              if (currentUser.is_admin) {
+                const bookingCardTitle = document.getElementById('bookingCardTitle');
+                const bookingUserBalanceRow = document.getElementById('bookingUserBalanceRow');
+                if (bookingCardTitle) bookingCardTitle.style.display = 'none';
+                if (bookingUserBalanceRow) bookingUserBalanceRow.style.display = 'none';
+                bookNowBtn.style.display = 'none';
+                buyCreditsBtn.style.display = 'none';
+              } else {
+                // If user already booked (pending) or was accepted before (locked), disable the button and show "Booked"
+                if (skill.booking_state === 'booked' || skill.booking_state === 'locked') {
+                  bookNowBtn.disabled = true;
+                  bookNowBtn.textContent = 'Booked';
+                  bookNowBtn.onclick = (e) => {
+                    e.preventDefault();
+                  };
+                  if (bookingStatusNote) {
+                    bookingStatusNote.style.display = '';
+                    bookingStatusNote.textContent =
+                      skill.booking_state === 'locked'
+                        ? "You already took this course (the teacher accepted you as a student). You can't book it again."
+                        : "You already booked this course. Please wait for the teacher's response (or check the Requests page).";
+                  }
+                } else {
+                bookNowBtn.onclick = async (e) => {
                 e.preventDefault();
+                let keepBooked = false;
+                let keepBookedState = 'booked';
                 
                 try {
                   currentUser = await apiClient.getUser();
@@ -399,23 +447,51 @@
                 } catch (err) {
                   console.error('Error booking session:', err);
                   
-                  const errorMsg = err.message || err.error || '';
-                  if (errorMsg.toLowerCase().includes('credit') || errorMsg.toLowerCase().includes('insufficient')) {
+                  const code = err?.data?.code;
+                  const errorMsg = err.message || err.error || err?.data?.error || '';
+                  if (code === 'ALREADY_BOOKED' || code === 'BOOKING_LOCKED') {
+                    keepBooked = true;
+                    keepBookedState = code === 'BOOKING_LOCKED' ? 'locked' : 'booked';
+                  }
+                  if (keepBooked) {
+                    if (keepBookedState === 'locked') {
+                      alert("You already took this course (the teacher accepted you). You can't book it again.");
+                    } else {
+                      alert("You already booked this course. Please wait for the teacher's response.");
+                    }
+                  } else if (errorMsg.toLowerCase().includes('credit') || errorMsg.toLowerCase().includes('insufficient')) {
                     alert(`Not enough credits!\n\nYou need ${skillPrice} credits to book this session.\nRedirecting to buy credits...`);
                     window.location.href = `{{ route('credits') }}?buy=true&amount=${skillPrice}`;
                   } else {
                     alert('Error: ' + errorMsg + '\n\nFailed to book session');
                   }
                 } finally {
-                  bookNowBtn.disabled = false;
-                  bookNowBtn.textContent = 'Book Now';
+                  if (keepBooked) {
+                    bookNowBtn.disabled = true;
+                    bookNowBtn.textContent = 'Booked';
+                    if (bookingStatusNote) {
+                      bookingStatusNote.style.display = '';
+                      bookingStatusNote.textContent =
+                        keepBookedState === 'locked'
+                          ? "You already took this course (the teacher accepted you as a student). You can't book it again."
+                          : "You already booked this course. Please wait for the teacher's response (or check the Requests page).";
+                    }
+                  } else {
+                    bookNowBtn.disabled = false;
+                    bookNowBtn.textContent = 'Book Now';
+                    if (bookingStatusNote) bookingStatusNote.style.display = 'none';
+                  }
                 }
-              };
+                };
+                }
+              }
 
-              buyCreditsBtn.onclick = (e) => {
-                e.preventDefault();
-                window.location.href = `{{ route('credits') }}?buy=true`;
-              };
+              if (!currentUser.is_admin) {
+                buyCreditsBtn.onclick = (e) => {
+                  e.preventDefault();
+                  window.location.href = `{{ route('credits') }}?buy=true`;
+                };
+              }
             }
           } else {
             bookingCard.style.display = 'none';
@@ -460,17 +536,22 @@
               return;
             }
 
+            if (currentUser?.is_admin) {
+              addFavoriteBtn.style.display = 'none';
+              return;
+            }
+
             const favorites = await apiClient.listFavorites();
             isFavorited = favorites.some(fav => fav.skill && fav.skill.id === skill.id);
             
             if (isFavorited) {
               addFavoriteBtn.textContent = 'Remove from Favorites';
-              addFavoriteBtn.classList.remove('btn-ghost');
+              addFavoriteBtn.classList.remove('btn-favorite');
               addFavoriteBtn.classList.add('btn-danger');
             } else {
               addFavoriteBtn.textContent = 'Add to Favorites';
               addFavoriteBtn.classList.remove('btn-danger');
-              addFavoriteBtn.classList.add('btn-ghost');
+              addFavoriteBtn.classList.add('btn-favorite');
             }
 
             addFavoriteBtn.onclick = async (e) => {
@@ -483,13 +564,13 @@
                   isFavorited = false;
                   addFavoriteBtn.textContent = 'Add to Favorites';
                   addFavoriteBtn.classList.remove('btn-danger');
-                  addFavoriteBtn.classList.add('btn-ghost');
+                  addFavoriteBtn.classList.add('btn-favorite');
                 } else {
                   await apiClient.addFavorite({ skill_id: skill.id });
                   alert('Added to favorites successfully!');
                   isFavorited = true;
                   addFavoriteBtn.textContent = 'Remove from Favorites';
-                  addFavoriteBtn.classList.remove('btn-ghost');
+                  addFavoriteBtn.classList.remove('btn-favorite');
                   addFavoriteBtn.classList.add('btn-danger');
                 }
               } catch (err) {
@@ -513,7 +594,7 @@
             if (addFavoriteBtn) {
               addFavoriteBtn.textContent = 'Add to Favorites';
               addFavoriteBtn.classList.remove('btn-danger');
-              addFavoriteBtn.classList.add('btn-ghost');
+              addFavoriteBtn.classList.add('btn-favorite');
             }
           }
         });

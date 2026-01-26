@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Leave a Review – SkillSwap')
+@section('title', 'Reviews – SkillSwap')
 
 @push('styles')
   <link rel="stylesheet" href="{{ asset('css/dashboard.css') }}" />
@@ -9,13 +9,46 @@
 @section('content')
   <div class="dashboard-bg"></div>
 
-  @include('components.sidebar')
+  @include('components.user-sidebar')
+  @include('components.admin-sidebar')
+  @include('components.sidebar-init')
 
   <!-- Main -->
   <main class="main-content">
     <header class="topbar glass">
-      <h2>Leave a review</h2>
+      <h2>Reviews</h2>
     </header>
+
+    <section class="dash-card-full glass" style="margin-bottom: 1.5rem;">
+      <div class="dash-card-header">
+        <h3>Skill performance</h3>
+      </div>
+
+      <table class="request-table" id="skillPerformanceTable">
+        <thead>
+          <tr>
+            <th>Skill</th>
+            <th>Status</th>
+            <th>Sessions</th>
+            <th>Avg rating</th>
+            <th>Credits earned</th>
+          </tr>
+        </thead>
+        <tbody id="skillPerformanceBody">
+          <tr><td colspan="5">Loading...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="dash-card-full glass" style="margin-bottom: 1.5rem;">
+      <div class="dash-card-header">
+        <h3>All reviews</h3>
+      </div>
+
+      <div id="allReviewsList">
+        <p class="muted">Loading reviews...</p>
+      </div>
+    </section>
 
     <section class="dash-card-full glass">
       <div class="dash-card-header">
@@ -192,7 +225,76 @@
 
     // Load on page load
     window.addEventListener('DOMContentLoaded', () => {
+      loadSkillPerformance();
+      loadAllReviews();
       loadReviewableSkills();
     });
+
+    async function loadSkillPerformance() {
+      const tbody = document.getElementById('skillPerformanceBody');
+      if (!tbody) return;
+
+      try {
+        const rows = await apiClient.getSkillPerformance();
+        if (!rows || !rows.length) {
+          tbody.innerHTML = "<tr><td colspan='5'>No performance data yet</td></tr>";
+          return;
+        }
+
+        tbody.innerHTML = rows.map(r => `
+          <tr>
+            <td>${r.skill_title || 'Untitled'}</td>
+            <td>${statusBadge(r.status || 'draft')}</td>
+            <td style="text-align:center;">${r.sessions_count ?? 0}</td>
+            <td style="text-align:center;">${(r.avg_rating ?? 0)} (${r.ratings_count ?? 0})</td>
+            <td style="text-align:center;">${r.credits_earned ?? 0}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error("Error loading skill performance:", err);
+        tbody.innerHTML = "<tr><td colspan='5'>Error loading performance</td></tr>";
+      }
+    }
+
+    async function loadAllReviews() {
+      const container = document.getElementById('allReviewsList');
+      if (!container) return;
+
+      try {
+        const me = await apiClient.getUser();
+        const reviews = await apiClient.getReviewsForUser(me.id);
+
+        if (!reviews || !reviews.length) {
+          container.innerHTML = "<p class='muted'>No reviews yet.</p>";
+          return;
+        }
+
+        container.innerHTML = reviews.map(r => {
+          const skillTitle = r.request?.skill?.title || 'Skill';
+          const reviewerName = r.from_user?.name || r.fromUser?.name || 'User';
+          const rating = r.rating ?? 0;
+          const comment = r.comment ? String(r.comment) : '';
+          const createdAt = r.created_at ? new Date(r.created_at).toLocaleDateString() : '';
+
+          return `
+            <div class="dash-card glass" style="margin-bottom: 1rem;">
+              <div class="dash-card-header">
+                <div>
+                  <h3 style="margin:0;">${skillTitle}</h3>
+                  <p style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.25rem;">
+                    By ${reviewerName}${createdAt ? ` • ${createdAt}` : ''}
+                  </p>
+                </div>
+                <span class="tag tag-blue">${rating} / 5</span>
+              </div>
+              ${comment ? `<p class="side-text" style="padding: 0.9rem 0;">${comment}</p>` : `<p class="side-text" style="padding: 0.9rem 0;">No comment.</p>`}
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error("Error loading reviews:", err);
+        container.innerHTML = "<p class='muted'>Error loading reviews. Please try again.</p>";
+      }
+    }
   </script>
 @endpush

@@ -9,19 +9,15 @@
 @section('content')
   <div class="dashboard-bg"></div>
 
-  @include('components.sidebar')
+  @include('components.user-sidebar')
+  @include('components.admin-sidebar')
+  @include('components.sidebar-init')
 
   <!-- Main -->
   <main class="main-content">
     <header class="topbar glass">
       <h2>Requests</h2>
       <div class="topbar-actions">
-        <button
-          class="btn-secondary js-show-toast"
-          data-toast-message="Create request flow coming soon."
-        >
-          New learning request
-        </button>
       </div>
     </header>
 
@@ -30,7 +26,7 @@
       <div class="dash-card glass">
         <div class="dash-card-header">
           <h3>Teaching requests</h3>
-          <button class="btn-small" onclick="loadTeachingRequests()">Refresh</button>
+          <button id="refreshTeachingBtn" class="btn-small" type="button">Refresh</button>
         </div>
 
         <div class="table-wrapper">
@@ -57,7 +53,7 @@
       <div class="dash-card glass">
         <div class="dash-card-header">
           <h3>Learning requests</h3>
-          <button class="btn-small" onclick="loadLearningRequests()">Refresh</button>
+          <button id="refreshLearningBtn" class="btn-small" type="button">Refresh</button>
         </div>
 
         <div class="table-wrapper">
@@ -69,11 +65,12 @@
                 <th>Time</th>
                 <th>Credits</th>
                 <th>Status</th>
+                <th>Actions</th>
               </tr>
             </thead>
 
             <tbody id="learningRequestsBody">
-              <tr><td colspan="5">Loading...</td></tr>
+              <tr><td colspan="6">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -128,18 +125,22 @@
       return `${month} ${day}, ${time}`;
     }
 
-    async function loadTeachingRequests() {
+    async function loadTeachingRequests(hideCancelled = false) {
       try {
         const requests = await apiClient.getTeachingRequests();
         const tbody = document.getElementById("teachingRequestsBody");
         tbody.innerHTML = "";
 
-        if (!requests || !requests.length) {
+        const displayRequests = hideCancelled
+          ? (requests || []).filter(r => (r.status || '').toLowerCase() !== 'cancelled')
+          : (requests || []);
+
+        if (!displayRequests.length) {
           tbody.innerHTML = "<tr><td colspan='6'>No teaching requests</td></tr>";
           return;
         }
 
-        requests.forEach(request => {
+        displayRequests.forEach(request => {
           const row = document.createElement('tr');
           row.innerHTML = `
             <td>${request.student?.name || 'Unknown'}</td>
@@ -164,18 +165,22 @@
       }
     }
 
-    async function loadLearningRequests() {
+    async function loadLearningRequests(hideCancelled = false) {
       try {
         const requests = await apiClient.getLearningRequests();
         const tbody = document.getElementById("learningRequestsBody");
         tbody.innerHTML = "";
 
-        if (!requests || !requests.length) {
-          tbody.innerHTML = "<tr><td colspan='5'>No learning requests</td></tr>";
+        const displayRequests = hideCancelled
+          ? (requests || []).filter(r => (r.status || '').toLowerCase() !== 'cancelled')
+          : (requests || []);
+
+        if (!displayRequests.length) {
+          tbody.innerHTML = "<tr><td colspan='6'>No learning requests</td></tr>";
           return;
         }
 
-        requests.forEach(request => {
+        displayRequests.forEach(request => {
           const row = document.createElement('tr');
           row.innerHTML = `
             <td>${request.skill?.user?.name || 'Unknown'}</td>
@@ -183,12 +188,17 @@
             <td>${formatDate(request.created_at)}</td>
             <td>${request.skill?.price || 0}</td>
             <td>${statusBadge(request.status)}</td>
+            <td class="action-cell">
+              ${request.status === 'pending' ? `
+                <button class="btn-small btn-danger" onclick="cancelLearningRequest(${request.id}, this)">Cancel</button>
+              ` : '<span style="color: var(--text-muted);">—</span>'}
+            </td>
           `;
           tbody.appendChild(row);
         });
       } catch (err) {
         console.error("Error loading learning requests:", err);
-        document.getElementById("learningRequestsBody").innerHTML = "<tr><td colspan='5'>Error loading requests</td></tr>";
+        document.getElementById("learningRequestsBody").innerHTML = "<tr><td colspan='6'>Error loading requests</td></tr>";
       }
     }
 
@@ -223,7 +233,59 @@
       }
     }
 
-    loadTeachingRequests();
-    loadLearningRequests();
+    async function cancelLearningRequest(requestId, btnEl = null) {
+      const confirmCancel = confirm("Cancel this request?");
+      if (!confirmCancel) return;
+
+      try {
+        await apiClient.cancelRequest(requestId);
+        alert("Request cancelled");
+
+        // Keep the row visible until user clicks Refresh
+        if (btnEl) {
+          const row = btnEl.closest('tr');
+          if (row) {
+            const statusCell = row.querySelector('td:nth-child(5)');
+            if (statusCell) statusCell.innerHTML = statusBadge('cancelled');
+
+            const actionCell = row.querySelector('td:nth-child(6)');
+            if (actionCell) {
+              actionCell.innerHTML = '<span style="color: var(--text-muted);">—</span>';
+            }
+          }
+          return;
+        }
+      } catch (err) {
+        alert(err.message || "Failed to cancel request");
+      }
+    }
+
+    // Ensure refresh buttons work even if inline handlers are blocked
+    document.getElementById('refreshTeachingBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      (async () => {
+        try {
+          await apiClient.purgeCancelledTeachingRequests();
+        } catch (err) {
+          console.error("Error deleting cancelled teaching requests:", err);
+        }
+        loadTeachingRequests(true);
+      })();
+    });
+    document.getElementById('refreshLearningBtn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      (async () => {
+        try {
+          await apiClient.purgeCancelledLearningRequests();
+        } catch (err) {
+          console.error("Error deleting cancelled learning requests:", err);
+        }
+        loadLearningRequests(true);
+      })();
+    });
+
+    // Initial load: keep cancelled visible. Refresh buttons hide them.
+    loadTeachingRequests(false);
+    loadLearningRequests(false);
   </script>
 @endpush

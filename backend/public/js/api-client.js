@@ -139,17 +139,26 @@ class ApiClient {
             if (!response.ok) {
                 // Handle authentication errors (401 - expired/invalid token)
                 if (response.status === 401) {
+                    // Check if this is a logout request - don't trigger tokenExpired event
+                    const isLogoutRequest = endpoint.includes('/logout');
+                    
                     // Clear token if it's invalid or expired
                     this.clearToken();
                     
-                    // Dispatch custom event for token expiration
-                    if (typeof window !== 'undefined') {
+                    // Only dispatch tokenExpired event if it's NOT a logout request
+                    // During logout, 401 is expected if token is expired
+                    if (!isLogoutRequest && typeof window !== 'undefined') {
                         window.dispatchEvent(new CustomEvent('tokenExpired', {
                             detail: {
                                 message: data.error || data.message || 'Token expired or invalid',
                                 code: data.code || 'UNAUTHENTICATED'
                             }
                         }));
+                    }
+                    
+                    // For logout requests, don't throw error - just return
+                    if (isLogoutRequest) {
+                        return { message: 'Logged out successfully' };
                     }
                     
                     throw new ApiError(
@@ -263,10 +272,14 @@ class ApiClient {
      */
     async logout() {
         try {
+            // Use the request method which will handle 401 gracefully for logout
             await this.post('/logout');
         } catch (err) {
             // Even if logout fails on backend, clear local data
-            console.error('Logout error:', err);
+            // 401 errors are expected if token is expired, so we ignore them
+            if (err.status !== 401) {
+                console.error('Logout error:', err);
+            }
         } finally {
             this.clearToken();
             // Clear any other auth-related data
@@ -343,6 +356,29 @@ class ApiClient {
      */
     async updateProfile(data) {
         const response = await this.put('/user/profile', data);
+        return response;
+    }
+
+    /**
+     * Change user password
+     * @param {string} currentPassword - Current password
+     * @param {string} newPassword - New password (min 8 characters)
+     * @returns {Promise<Object>} Success message
+     */
+    async changePassword(currentPassword, newPassword) {
+        const response = await this.post('/user/change-password', {
+            current_password: currentPassword,
+            new_password: newPassword
+        });
+        return response;
+    }
+
+    /**
+     * Delete own account
+     * @returns {Promise<Object>} Success message
+     */
+    async deleteOwnAccount() {
+        const response = await this.delete('/user/account');
         return response;
     }
 
@@ -541,6 +577,15 @@ class ApiClient {
     }
 
     /**
+     * Get platform statistics (public endpoint)
+     * @returns {Promise<Object>} Statistics object with total_users and active_skills
+     */
+    async getStatistics() {
+        const response = await this.get('/statistics');
+        return response.statistics;
+    }
+
+    /**
      * Get skills in a category
      * @param {number} categoryId - Category ID
      * @returns {Promise<Array>} List of skills
@@ -618,6 +663,22 @@ class ApiClient {
     async getLearningRequests() {
         const response = await this.get('/requests/learning');
         return response.requests;
+    }
+
+    /**
+     * Permanently delete cancelled learning requests for current user
+     * @returns {Promise<Object>} { message, deleted }
+     */
+    async purgeCancelledLearningRequests() {
+        return await this.delete('/requests/purge-cancelled/learning');
+    }
+
+    /**
+     * Permanently delete cancelled teaching requests for current user's skills
+     * @returns {Promise<Object>} { message, deleted }
+     */
+    async purgeCancelledTeachingRequests() {
+        return await this.delete('/requests/purge-cancelled/teaching');
     }
 
     // ==================== FAVORITE ENDPOINTS ====================
@@ -720,6 +781,15 @@ class ApiClient {
     async getReviewsForSkill(skillId) {
         const response = await this.get(`/reviews/skill/${skillId}`);
         return response.reviews;
+    }
+
+    /**
+     * Get per-skill performance for the authenticated teacher
+     * @returns {Promise<Array>} Array of { skill_id, skill_title, status, sessions_count, avg_rating, ratings_count, credits_earned }
+     */
+    async getSkillPerformance() {
+        const response = await this.get('/reviews/skill-performance');
+        return response.skills;
     }
 
     // ==================== TRANSACTION ENDPOINTS ====================
@@ -848,6 +918,17 @@ class ApiClient {
      */
     async deleteUser(id) {
         await this.delete(`/admin/users/${id}`);
+    }
+
+    /**
+     * Verify/unverify a user (admin only)
+     * @param {number} id - User ID
+     * @param {boolean} isVerified - New verified status
+     * @returns {Promise<Object>} Updated user subset
+     */
+    async setUserVerified(id, isVerified) {
+        const response = await this.put(`/admin/users/${id}/verify`, { is_verified: !!isVerified });
+        return response.user;
     }
 
     /**

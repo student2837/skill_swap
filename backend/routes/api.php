@@ -22,6 +22,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [UserController::class, 'logout']);
     Route::put('/user/profile', [UserController::class, 'updateProfile']);
     Route::get('/user', [UserController::class, 'getUser']);
+    Route::post('/user/change-password', [UserController::class, 'changePassword']);
+    Route::delete('/user/account', [UserController::class, 'deleteOwnAccount']);
 });
 
 
@@ -39,6 +41,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/requests/teaching', [RequestController::class, 'getTeachingRequests']);
     Route::get('/requests/learning', [RequestController::class, 'getLearningRequests']);
 
+    // Purge cancelled requests (used by Requests page refresh)
+    Route::delete('/requests/purge-cancelled/teaching', [RequestController::class, 'purgeCancelledTeachingRequests']);
+    Route::delete('/requests/purge-cancelled/learning', [RequestController::class, 'purgeCancelledLearningRequests']);
+
     // Extra: teacher/student skill views
     Route::get('/user/teaching-skills', [UserController::class, 'getTeachingSkills']);
     Route::get('/user/learning-skills', [UserController::class, 'getLearningSkills']);
@@ -50,6 +56,7 @@ Route::get('/skills', [SkillController::class, 'listAllSkills']);
 Route::get('/skills/search', [SkillController::class, 'searchSkill']); // Must be before /skills/{id} to avoid route conflict
 Route::get('/skills/by-category', [SkillController::class, 'getSkillsByCategory']); // Must be before /skills/{id} to avoid route conflict
 Route::get('/skills/{id}', [SkillController::class, 'getSkill']);
+Route::get('/statistics', [SkillController::class, 'getStatistics']); // Public statistics endpoint
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/skills', [SkillController::class, 'createSkill']);
@@ -86,6 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reviews/user/{userId}', [ReviewController::class, 'getReviewsForUser']);
     Route::get('/reviews/user/{userId}/average', [ReviewController::class, 'getAverageRating']);
     Route::get('/reviews/reviewable', [ReviewController::class, 'getReviewableRequests']);
+    Route::get('/reviews/skill-performance', [ReviewController::class, 'getSkillPerformance']);
 });
 
 // Public endpoint for skill reviews
@@ -132,6 +140,7 @@ Route::middleware('auth:sanctum')->group(function () {
 // Admin-only endpoints
 Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
     Route::get('/users', [UserController::class, 'getAllUsers']);
+    Route::put('/users/{id}/verify', [UserController::class, 'setUserVerified']);
     Route::delete('/users/{id}', [UserController::class, 'deleteUser']);
     Route::get('/transactions', [TransactionController::class, 'getAllTransactions']);
     // Note: /payouts/all is already defined in the payouts routes above

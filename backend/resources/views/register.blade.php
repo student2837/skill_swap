@@ -12,6 +12,7 @@
   <div class="auth-bg"></div>
 
   <div class="auth-card glass">
+    <a href="{{ route('index') }}" class="auth-back" aria-label="Back to home">←</a>
     <img
       src="{{ asset('assets/logo.png') }}"
       alt="SkillSwap Logo"

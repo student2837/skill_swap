@@ -1,5 +1,5 @@
-<!-- Sidebar -->
-<aside class="sidebar glass">
+<!-- User Sidebar - Only for regular users -->
+<aside class="sidebar glass" id="userSidebarComponent" style="display: none;">
   <div class="sidebar-logo-wrap">
     <img src="{{ asset('assets/logo.png') }}" class="sidebar-logo-img" />
   </div>
@@ -17,12 +17,12 @@
   </nav>
 
   <div class="sidebar-footer">
-    <a href="{{ route('login') }}" class="logout-btn" onclick="event.preventDefault(); handleLogout();">🚪 Logout</a>
+    <a href="{{ route('login') }}" class="logout-btn" onclick="event.preventDefault(); userSidebarLogout();">🚪 Logout</a>
   </div>
 </aside>
 
 <script>
-  async function handleLogout() {
+  async function userSidebarLogout() {
     const API = "{{ url('/api') }}";
     const apiClient = new ApiClient(API);
     try {

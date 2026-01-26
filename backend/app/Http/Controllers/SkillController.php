@@ -7,6 +7,7 @@ use App\Http\Requests\StoreSkillRequest;
 use App\Http\Requests\UpdateSkillRequest;
 use App\Models\Skill;
 use App\Models\SkillRequest;
+use App\Models\User;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
@@ -25,7 +26,20 @@ class SkillController extends Controller
         if (!isset($validatedData['status'])) {
             $validatedData['status'] = 'draft';
         }
-        $skill=Skill::create($validatedData);
+        
+        // Extract category_id and remove it from validated data (not a skill column)
+        $categoryId = $validatedData['category_id'];
+        unset($validatedData['category_id']);
+        
+        // Create skill
+        $skill = Skill::create($validatedData);
+        
+        // Attach category via pivot table
+        $skill->categories()->attach($categoryId);
+        
+        // Load category relationship for response
+        $skill->load('categories');
+        
         return response()->json([
             'message' => 'Skill created successfully',
             'skill' => $skill
@@ -33,7 +47,7 @@ class SkillController extends Controller
 
         }
         catch(Exception $e){
-        return response()->json(['error' => 'Something went wrong'], 500);
+        return response()->json(['error' => 'Something went wrong: ' . $e->getMessage()], 500);
         }
     }
 
@@ -43,14 +57,28 @@ class SkillController extends Controller
         if($skill->user_id != Auth::id())
             return response()->json(['error' => 'Unauthorized'], 403);
 
-        $skill->update($request->validated());
+        $validatedData = $request->validated();
+        
+        // Extract category_id and remove it from validated data
+        $categoryId = $validatedData['category_id'];
+        unset($validatedData['category_id']);
+        
+        // Update skill
+        $skill->update($validatedData);
+        
+        // Sync category (replace all existing categories with the new one)
+        $skill->categories()->sync([$categoryId]);
+        
+        // Load category relationship for response
+        $skill->load('categories');
+        
         return response()->json([
                 'message' => 'Skill updated successfully',
                 'skill' => $skill
             ]);
         }
         catch (Exception $e) {
-            return response()->json(['error' => 'Something went wrong'], 500);
+            return response()->json(['error' => 'Something went wrong: ' . $e->getMessage()], 500);
         }
     }
 
@@ -91,9 +119,19 @@ class SkillController extends Controller
                   ->orWhere('description', 'like', "%{$query}%");
             });
         
-        // Filter by category if provided
+        // Filter by category if provided (can be category ID or name)
         if ($category !== null && $category !== '') {
-            $skillsQuery->where('category', $category);
+            // Check if it's a numeric ID
+            if (is_numeric($category)) {
+                $skillsQuery->whereHas('categories', function($q) use ($category) {
+                    $q->where('categories.id', $category);
+                });
+            } else {
+                // Otherwise treat as category name
+                $skillsQuery->whereHas('categories', function($q) use ($category) {
+                    $q->where('categories.name', $category);
+                });
+            }
         }
         
         // If user is authenticated, exclude their own skills
@@ -107,7 +145,7 @@ class SkillController extends Controller
             $skillsQuery->where('rating_avg', '>=', $minRatingFloat);
         }
 
-        $skills = $skillsQuery->with('user:id,name,rating_avg')
+        $skills = $skillsQuery->with(['user:id,name,rating_avg,is_verified', 'categories:id,name'])
             ->get()
             ->map(function($skill) {
                 // Count students
@@ -140,14 +178,22 @@ class SkillController extends Controller
             $minRating = $request->input('min_rating');
             $userId = Auth::id(); // Get authenticated user ID, null if not authenticated
             
-            // Validate category enum
-            $validCategories = ['music', 'programming', 'design', 'languages', 'other'];
-            if (!in_array($category, $validCategories)) {
-                return response()->json(['error' => 'Invalid category'], 400);
+            // Validate category exists (can be ID or name)
+            $categoryModel = null;
+            if (is_numeric($category)) {
+                $categoryModel = \App\Models\Category::find($category);
+            } else {
+                $categoryModel = \App\Models\Category::where('name', $category)->first();
+            }
+            
+            if (!$categoryModel) {
+                return response()->json(['error' => 'Category not found'], 404);
             }
 
             $skillsQuery = Skill::where('status', 'active')
-                ->where('category', $category);
+                ->whereHas('categories', function($q) use ($categoryModel) {
+                    $q->where('categories.id', $categoryModel->id);
+                });
             
             // If user is authenticated, exclude their own skills
             if ($userId) {
@@ -160,7 +206,7 @@ class SkillController extends Controller
                 $skillsQuery->where('rating_avg', '>=', $minRatingFloat);
             }
 
-            $skills = $skillsQuery->with('user:id,name,rating_avg')
+            $skills = $skillsQuery->with(['user:id,name,rating_avg,is_verified', 'categories:id,name'])
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function($skill) {
@@ -205,7 +251,7 @@ class SkillController extends Controller
                 $query->where('rating_avg', '>=', $minRatingFloat);
             }
             
-            $skills = $query->with('user:id,name,rating_avg')
+            $skills = $query->with('user:id,name,rating_avg,is_verified')
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function($skill) {
@@ -232,9 +278,12 @@ class SkillController extends Controller
         }
     }
 
-    public function getSkill($id){
+    public function getSkill(Request $request, $id){
         try {
-            $userId = Auth::id(); // Get authenticated user ID, null if not authenticated
+            // This endpoint is public, but if a Bearer token is present we still want
+            // to detect the authenticated user to support "Booked" UI states.
+            $authUser = $request->user('sanctum') ?? $request->user() ?? Auth::user();
+            $userId = $authUser?->id; // null if not authenticated
             
             // First try to find the skill without status filter to see if it exists
             $skill = Skill::find($id);
@@ -243,19 +292,17 @@ class SkillController extends Controller
                 return response()->json(['error' => 'Skill not found'], 404);
             }
 
-            // Check if skill is active (only show active skills publicly)
-            if ($skill->status !== 'active') {
-                return response()->json(['error' => 'Skill is not available'], 404);
-            }
+            $isOwner = $userId && ((int) $skill->user_id === (int) $userId);
 
-            // If user is authenticated and this is their own skill, return error
-            if ($userId && $skill->user_id === $userId) {
-                return response()->json(['error' => 'You cannot view your own skill here'], 403);
+            // Only owners can view non-active skills.
+            // Public browsing should still show active-only.
+            if (!$isOwner && $skill->status !== 'active') {
+                return response()->json(['error' => 'Skill is not available'], 404);
             }
 
             // Load relationships with error handling
             try {
-                $skill->load('user:id,name,bio,profile_pic,rating_avg');
+                $skill->load('user:id,name,bio,profile_pic,rating_avg,is_verified');
             } catch (\Exception $e) {
                 // If user loading fails, set user to null
                 $skill->setRelation('user', null);
@@ -282,6 +329,39 @@ class SkillController extends Controller
                 // If counting fails, set to 0
                 $skill->students_count = 0;
                 \Log::warning('Failed to count students for skill: ' . $skill->id, ['error' => $e->getMessage()]);
+            }
+
+            // Booking state for current authenticated user (used by "Book Now" button)
+            // available: can book now
+            // booked: has a pending request
+            // locked: has ever been accepted/completed for this skill (never rebook)
+            if ($userId) {
+                try {
+                    $statuses = SkillRequest::where('skill_id', $skill->id)
+                        ->where('student_id', $userId)
+                        ->pluck('status');
+
+                    if ($statuses->contains('accepted') || $statuses->contains('completed')) {
+                        $skill->booking_state = 'locked';
+                        $skill->my_request_status = 'accepted';
+                    } elseif ($statuses->contains('pending')) {
+                        $skill->booking_state = 'booked';
+                        $skill->my_request_status = 'pending';
+                    } else {
+                        $skill->booking_state = 'available';
+                        $latest = SkillRequest::where('skill_id', $skill->id)
+                            ->where('student_id', $userId)
+                            ->latest()
+                            ->value('status');
+                        $skill->my_request_status = $latest ?: null;
+                    }
+                } catch (\Exception $e) {
+                    $skill->booking_state = 'available';
+                    $skill->my_request_status = null;
+                }
+            } else {
+                $skill->booking_state = 'guest';
+                $skill->my_request_status = null;
             }
 
             return response()->json([
@@ -395,6 +475,24 @@ public function getSkillStudents($skillId)
     }
 }
 
-
-
+    public function getStatistics()
+    {
+        try {
+            // Count total users (excluding admins, or including all - you can adjust)
+            $totalUsers = User::where('is_admin', false)->count();
+            
+            // Count active skills
+            $activeSkills = Skill::where('status', 'active')->count();
+            
+            return response()->json([
+                'message' => 'Statistics retrieved successfully',
+                'statistics' => [
+                    'total_users' => $totalUsers,
+                    'active_skills' => $activeSkills
+                ]
+            ]);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Something went wrong'], 500);
+        }
+    }
 }

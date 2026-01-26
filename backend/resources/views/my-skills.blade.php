@@ -9,20 +9,14 @@
 @section('content')
   <div class="dashboard-bg"></div>
 
-  @include('components.sidebar')
+  @include('components.user-sidebar')
+  @include('components.admin-sidebar')
+  @include('components.sidebar-init')
 
   <!-- Main -->
   <main class="main-content">
     <header class="topbar glass">
       <h2>Your Skills</h2>
-      <div class="topbar-actions">
-        <a href="{{ route('add-skill') }}" class="btn-primary">
-          Add Teaching Skill
-        </a>
-        <a href="{{ route('browse') }}" class="btn-secondary">
-          Browse Skills to Learn
-        </a>
-      </div>
     </header>
 
     <section class="two-col">
@@ -66,32 +60,23 @@
     <section class="dash-card-full glass">
       <div class="dash-card-header">
         <h3>Skill performance</h3>
-        <button
-          class="btn-small js-show-toast"
-          data-toast-message="Reviews list will be available soon."
-        >
+        <a class="btn-small" href="{{ route('review') }}">
           View all reviews
-        </button>
+        </a>
       </div>
 
-      <table class="request-table">
+      <table class="request-table" id="skillPerformanceTable">
         <thead>
           <tr>
             <th>Skill</th>
-            <th>Role</th>
+            <th>Status</th>
             <th>Sessions</th>
             <th>Avg rating</th>
-            <th>Credits earned/spent</th>
+            <th>Credits earned</th>
           </tr>
         </thead>
-        <tbody>
-          <tr>
-            <td>—</td>
-            <td>—</td>
-            <td>—</td>
-            <td>—</td>
-            <td>—</td>
-          </tr>
+        <tbody id="skillPerformanceBody">
+          <tr><td colspan="5">Loading...</td></tr>
         </tbody>
       </table>
     </section>
@@ -256,7 +241,34 @@
       }
     }
 
+    async function loadSkillPerformance() {
+      const tbody = document.getElementById('skillPerformanceBody');
+      if (!tbody) return;
+
+      try {
+        const rows = await apiClient.getSkillPerformance();
+        if (!rows || !rows.length) {
+          tbody.innerHTML = "<tr><td colspan='5'>No performance data yet</td></tr>";
+          return;
+        }
+
+        tbody.innerHTML = rows.map(r => `
+          <tr>
+            <td>${r.skill_title || 'Untitled'}</td>
+            <td>${statusBadge(r.status || 'draft')}</td>
+            <td style="text-align:center;">${r.sessions_count ?? 0}</td>
+            <td style="text-align:center;">${(r.avg_rating ?? 0)} (${r.ratings_count ?? 0})</td>
+            <td style="text-align:center;">${r.credits_earned ?? 0}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error("Error loading skill performance:", err);
+        tbody.innerHTML = "<tr><td colspan='5'>Error loading performance</td></tr>";
+      }
+    }
+
     loadTeachingSkills();
     loadLearningSkills();
+    loadSkillPerformance();
   </script>
 @endpush

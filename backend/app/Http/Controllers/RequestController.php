@@ -29,9 +29,63 @@ class RequestController extends Controller
                 return response()->json(['error' => 'User not found. Please log in again.'], 401);
             }
 
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['error' => 'User not found. Please log in again.'], 401);
+            }
+
             // Prevent users from requesting their own skills
             if ($skill->user_id === $userId) {
                 return response()->json(['error' => 'You cannot request a session for your own skill'], 403);
+            }
+
+            // Booking rules:
+            // - If there was ever an accepted/completed request for this student + skill => never allow rebook
+            // - If there is a pending request for this student + skill => do not allow rebook (button should show "Booked")
+            // - Allow rebook only if the latest attempts were cancelled/rejected (or no previous requests)
+            DB::beginTransaction();
+            try {
+                $existing = SkillRequest::where('student_id', $userId)
+                    ->where('skill_id', $skill->id)
+                    ->lockForUpdate()
+                    ->get(['id', 'status']);
+
+                $hasAccepted = $existing->contains(function ($r) {
+                    return in_array($r->status, ['accepted', 'completed'], true);
+                });
+                if ($hasAccepted) {
+                    DB::rollBack();
+                    return response()->json([
+                        'error' => 'You already booked this skill and were accepted. You cannot book it again.',
+                        'code' => 'BOOKING_LOCKED',
+                        'status' => 'accepted',
+                    ], 409);
+                }
+
+                $hasPending = $existing->contains(function ($r) {
+                    return $r->status === 'pending';
+                });
+                if ($hasPending) {
+                    DB::rollBack();
+                    return response()->json([
+                        'error' => 'You already booked this skill.',
+                        'code' => 'ALREADY_BOOKED',
+                        'status' => 'pending',
+                    ], 409);
+                }
+
+            // Ensure student has enough credits before creating the request
+            // (Skill details UI will redirect to buy credits on this error.)
+            $skillPrice = (int) ($skill->price ?? 0);
+            $userCredits = (int) ($user->credits ?? 0);
+            if ($skillPrice > 0 && $userCredits < $skillPrice) {
+                DB::rollBack();
+                return response()->json([
+                    'error' => 'Insufficient credits to book this skill.',
+                    'required_credits' => $skillPrice,
+                    'current_credits' => $userCredits,
+                    'missing_credits' => max(0, $skillPrice - $userCredits),
+                ], 400);
             }
 
             $request = SkillRequest::create([
@@ -47,10 +101,15 @@ class RequestController extends Controller
                 $request->id
             );
 
+                DB::commit();
             return response()->json([
                 'message' => 'Request created successfully',
                 'request' => $request
             ], 201);
+            } catch (Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
 
         }
         catch (ModelNotFoundException $e) {
@@ -71,9 +130,9 @@ class RequestController extends Controller
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
-            // Prevent accepting already accepted/completed requests
-            if ($req->status === 'accepted' || $req->status === 'completed') {
-                return response()->json(['error' => 'Request already accepted or completed'], 400);
+            // Only pending requests can be accepted
+            if ($req->status !== 'pending') {
+                return response()->json(['error' => 'Only pending requests can be accepted'], 400);
             }
 
             $skill = $req->skill;
@@ -151,10 +210,15 @@ class RequestController extends Controller
     public function rejectRequest($id)
     {
         try {
-            $req = SkillRequest::findOrFail($id);
+            $req = SkillRequest::with('skill')->findOrFail($id);
 
             if ($req->skill->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            // Only pending requests can be rejected
+            if ($req->status !== 'pending') {
+                return response()->json(['error' => 'Only pending requests can be rejected'], 400);
             }
 
             $req->update(['status' => 'rejected']);
@@ -183,6 +247,11 @@ class RequestController extends Controller
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
+            // Only pending requests can be cancelled by the student
+            if ($req->status !== 'pending') {
+                return response()->json(['error' => 'Only pending requests can be cancelled'], 400);
+            }
+
             $req->update(['status' => 'cancelled']);
 
             return response()->json([
@@ -202,10 +271,15 @@ class RequestController extends Controller
     public function completeRequest($id)
     {
         try {
-            $req = SkillRequest::findOrFail($id);
+            $req = SkillRequest::with('skill')->findOrFail($id);
 
             if ($req->skill->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            // Only accepted requests can be completed
+            if ($req->status !== 'accepted') {
+                return response()->json(['error' => 'Only accepted requests can be marked as completed'], 400);
             }
 
             $req->update(['status' => 'completed']);
@@ -269,6 +343,56 @@ class RequestController extends Controller
                 'requests' => $requests
             ], 200);
 
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Something went wrong'], 500);
+        }
+    }
+
+    /**
+     * Permanently delete cancelled learning requests for the authenticated user.
+     */
+    public function purgeCancelledLearningRequests()
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['error' => 'Unauthenticated'], 401);
+            }
+
+            $deleted = SkillRequest::where('student_id', $user->id)
+                ->where('status', 'cancelled')
+                ->delete();
+
+            return response()->json([
+                'message' => 'Cancelled learning requests deleted successfully',
+                'deleted' => $deleted
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Something went wrong'], 500);
+        }
+    }
+
+    /**
+     * Permanently delete cancelled teaching requests for skills owned by the authenticated user.
+     */
+    public function purgeCancelledTeachingRequests()
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['error' => 'Unauthenticated'], 401);
+            }
+
+            $deleted = SkillRequest::where('status', 'cancelled')
+                ->whereHas('skill', function ($query) use ($user) {
+                    $query->where('user_id', $user->id);
+                })
+                ->delete();
+
+            return response()->json([
+                'message' => 'Cancelled teaching requests deleted successfully',
+                'deleted' => $deleted
+            ], 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Something went wrong'], 500);
         }

@@ -6,8 +6,10 @@ use App\Models\Review;
 use App\Models\SkillRequest;
 use App\Models\Skill;
 use App\Models\User;
+use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Exception;
 
 class ReviewController extends Controller
@@ -116,7 +118,11 @@ class ReviewController extends Controller
     {
         try {
             $reviews = Review::where('to_user_id', $userId)
-                ->with('fromUser:id,name,profile_pic')  // reviewer info
+                ->with([
+                    'fromUser:id,name,profile_pic',
+                    'request.skill:id,title,status,user_id'
+                ])  // reviewer + skill info
+                ->orderBy('created_at', 'desc')
                 ->get();
 
             return response()->json([
@@ -211,6 +217,82 @@ class ReviewController extends Controller
                 'requests' => $requests
             ], 200);
 
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Something went wrong'], 500);
+        }
+    }
+
+    /**
+     * Skill performance summary for the authenticated teacher.
+     * Returns per-skill: sessions_count, avg_rating, ratings_count, credits_earned, status.
+     */
+    public function getSkillPerformance()
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['error' => 'Unauthenticated'], 401);
+            }
+
+            $skills = Skill::where('user_id', $user->id)
+                ->select('id', 'title', 'status')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            if ($skills->isEmpty()) {
+                return response()->json(['skills' => []], 200);
+            }
+
+            $skillIds = $skills->pluck('id')->all();
+
+            // Sessions: count accepted/completed requests per skill
+            $sessionsBySkill = SkillRequest::whereIn('skill_id', $skillIds)
+                ->whereIn('status', ['accepted', 'completed'])
+                ->select('skill_id', DB::raw('COUNT(*) as sessions_count'))
+                ->groupBy('skill_id')
+                ->pluck('sessions_count', 'skill_id');
+
+            // Ratings: avg + count per skill (reviews written about this teacher, grouped by skill)
+            $ratingsRows = Review::join('requests', 'requests.id', '=', 'reviews.request_id')
+                ->whereIn('requests.skill_id', $skillIds)
+                ->where('reviews.to_user_id', $user->id)
+                ->select(
+                    'requests.skill_id as skill_id',
+                    DB::raw('AVG(reviews.rating) as avg_rating'),
+                    DB::raw('COUNT(reviews.id) as ratings_count')
+                )
+                ->groupBy('requests.skill_id')
+                ->get()
+                ->keyBy('skill_id');
+
+            // Credits earned: sum skill_earning transactions per skill via request reference_id
+            $creditsBySkill = Transaction::join('requests', DB::raw('transactions.reference_id'), '=', DB::raw("CONCAT('request_', requests.id)"))
+                ->whereIn('requests.skill_id', $skillIds)
+                ->where('transactions.user_id', $user->id)
+                ->where('transactions.type', 'skill_earning')
+                ->where('transactions.status', 'completed')
+                ->select('requests.skill_id as skill_id', DB::raw('SUM(transactions.amount) as credits_earned'))
+                ->groupBy('requests.skill_id')
+                ->pluck('credits_earned', 'skill_id');
+
+            $result = $skills->map(function ($skill) use ($sessionsBySkill, $ratingsRows, $creditsBySkill) {
+                $sessions = (int) ($sessionsBySkill[$skill->id] ?? 0);
+                $avgRating = $ratingsRows->has($skill->id) ? (float) ($ratingsRows[$skill->id]->avg_rating ?? 0) : 0.0;
+                $ratingsCount = $ratingsRows->has($skill->id) ? (int) ($ratingsRows[$skill->id]->ratings_count ?? 0) : 0;
+                $credits = (float) ($creditsBySkill[$skill->id] ?? 0);
+
+                return [
+                    'skill_id' => $skill->id,
+                    'skill_title' => $skill->title ?? 'Untitled',
+                    'status' => $skill->status ?? 'draft',
+                    'sessions_count' => $sessions,
+                    'avg_rating' => $ratingsCount > 0 ? round($avgRating, 2) : 0,
+                    'ratings_count' => $ratingsCount,
+                    'credits_earned' => $credits,
+                ];
+            })->values();
+
+            return response()->json(['skills' => $result], 200);
         } catch (Exception $e) {
             return response()->json(['error' => 'Something went wrong'], 500);
         }

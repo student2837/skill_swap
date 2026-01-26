@@ -9,7 +9,9 @@
 @section('content')
   <div class="dashboard-bg"></div>
 
-  @include('components.sidebar')
+  @include('components.user-sidebar')
+  @include('components.admin-sidebar')
+  @include('components.sidebar-init')
 
   <!-- Main -->
   <main class="main-content">
@@ -17,8 +19,7 @@
       <h2 id="welcomeText">Welcome back 👋</h2>
 
       <div class="topbar-actions">
-        <a href="{{ route('add-skill') }}" class="btn-primary">Teach a Skill</a>
-        <a href="{{ route('credits') }}" class="btn-secondary">Buy Credits</a>
+        <a href="{{ route('credits') }}" class="btn-primary">Buy Credits</a>
       </div>
     </header>
 
@@ -174,12 +175,20 @@
     async function loadUser() {
       try {
         const u = await apiClient.getUser();
-        if (u.name) {
-          document.getElementById("welcomeText").textContent =
-            `Welcome back, ${u.name} 👋`;
-        } else if (u.first_name) {
-          document.getElementById("welcomeText").textContent =
-            `Welcome back, ${u.first_name} 👋`;
+        const welcomeEl = document.getElementById("welcomeText");
+        if (welcomeEl) {
+          const displayName = u.name || u.first_name || '';
+          if (displayName) {
+            welcomeEl.textContent = `Welcome back, ${displayName} 👋`;
+            if (u.is_verified) {
+              const tick = document.createElement('span');
+              tick.textContent = ' ✓';
+              tick.title = 'Verified';
+              tick.style.color = '#3b82f6';
+              tick.style.fontWeight = '700';
+              welcomeEl.appendChild(tick);
+            }
+          }
         }
         
         // Load teacher rating

@@ -27,13 +27,7 @@ class StoreSkillRequest extends FormRequest
             'description' => 'nullable|string',
             'price' => 'required|integer|min:1',
 
-            'category' => ['required', Rule::in([
-                'music',
-                'programming',
-                'design',
-                'languages',
-                'other'
-            ])],
+            'category_id' => 'required|exists:categories,id',
 
             'shortDesc' => [
                 'nullable',

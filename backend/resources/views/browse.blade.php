@@ -4,6 +4,94 @@
 
 @push('styles')
   <link rel="stylesheet" href="{{ asset('css/styles.css') }}" />
+  <style>
+    #browseHeader {
+      display: none;
+    }
+    /* Browse skill cards styling */
+    #browseSkillsGrid {
+      grid-template-columns: repeat(auto-fill, minmax(240px, 260px)) !important;
+    }
+    #browseSkillsGrid .skill-card {
+      padding: 0.9rem 1rem !important;
+      width: 100%;
+      max-width: 260px;
+      min-height: 280px;
+      background: linear-gradient(180deg, #0f172a, #1e40af) !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: visible !important;
+      position: relative !important;
+    }
+    #browseSkillsGrid .skill-card::before {
+      display: none !important;
+      content: none !important;
+    }
+    #browseSkillsGrid .skill-card-header {
+      border-bottom: none !important;
+      padding-bottom: 0 !important;
+      margin-bottom: 0 !important;
+      flex: 0 0 auto;
+    }
+    #browseSkillsGrid .skill-card-header h3 {
+      font-size: 1.4rem !important;
+      line-height: 1.2 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      text-align: left !important;
+    }
+    #browseSkillsGrid .skill-card-header h3::after {
+      display: none;
+    }
+    #browseSkillsGrid .skill-card-header .chip {
+      font-size: 0.85rem !important;
+    }
+    #browseSkillsGrid .skill-card-teacher {
+      color: rgba(255, 255, 255, 0.85) !important;
+      margin: 0 !important;
+      margin-top: 0.3rem !important;
+      padding: 0 !important;
+      padding-left: 0 !important;
+      font-size: 1.3rem !important;
+      font-weight: normal !important;
+      line-height: 1.2 !important;
+      text-align: left !important;
+      flex: 0 0 auto;
+    }
+    #browseSkillsGrid .skill-card-teacher::before {
+      display: none;
+    }
+    #browseSkillsGrid .skill-card-desc {
+      margin: 0 !important;
+      margin-top: 0.5rem !important;
+      margin-left: 0 !important;
+      padding: 0 !important;
+      padding-left: 0 !important;
+      font-size: 0.95rem !important;
+      text-align: left !important;
+      display: block !important;
+      visibility: visible !important;
+      position: relative !important;
+      flex: 0 0 auto;
+      flex-grow: 0;
+    }
+    #browseSkillsGrid .skill-card-footer {
+      border-top: none !important;
+      margin-top: auto !important;
+      padding-top: 1rem !important;
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+      width: 100% !important;
+      flex: 0 0 auto;
+    }
+    #browseSkillsGrid .skill-card-footer .rating .rating-value {
+      font-size: 1rem !important;
+    }
+    #browseSkillsGrid .skill-card-footer .btn {
+      font-size: 0.9rem !important;
+    }
+  </style>
 @endpush
 
 @section('body-class', 'page')
@@ -12,7 +100,7 @@
   <div class="page-bg"></div>
 
   <!-- Header -->
-  <header class="site-header glass">
+  <header class="site-header glass" id="browseHeader">
     <div class="container nav-container">
       <a href="{{ route('index') }}" class="logo-wrap">
         <img src="{{ asset('assets/logo.png') }}" alt="SkillSwap Logo" class="logo-img" />
@@ -35,7 +123,7 @@
     <section class="section">
       <div class="container">
         <button class="back-button" onclick="window.history.back()">
-          ← Back
+          ←
         </button>
         <div class="section-header">
           <h2>Browse Skills</h2>
@@ -61,11 +149,6 @@
               <span>Category</span>
               <select id="browse-category">
                 <option value="">All</option>
-                <option value="programming">Programming</option>
-                <option value="design">Design</option>
-                <option value="music">Music</option>
-                <option value="languages">Languages</option>
-                <option value="other">Other</option>
               </select>
             </label>
 
@@ -119,6 +202,30 @@
     if (token) {
       apiClient.setToken(token);
     }
+
+    // Show header only for non-authenticated users
+    (async function() {
+      try {
+        const header = document.getElementById('browseHeader');
+        if (!header) return;
+        
+        // Check if user is authenticated
+        const token = localStorage.getItem('token');
+        
+        if (token && apiClient.isAuthenticated()) {
+          // User is logged in, hide header
+          header.style.display = 'none';
+        } else {
+          // User is not logged in, show header
+          header.style.display = 'block';
+        }
+      } catch (err) {
+        console.error("Error checking authentication for header:", err);
+        // On error, show header (assume not logged in)
+        const header = document.getElementById('browseHeader');
+        if (header) header.style.display = 'block';
+      }
+    })();
 
     // Update navigation based on authentication status
     function updateNavigation() {
@@ -178,7 +285,7 @@
             <p class="skill-card-teacher">${skill.user?.name || skill.user_name || 'Unknown teacher'}</p>
             <p class="skill-card-desc">${skill.shortDesc || skill.description || 'No description available.'}</p>
             <div class="skill-card-footer">
-              <span class="rating">★ ${skill.rating_avg ? skill.rating_avg.toFixed(1) : 'N/A'}</span>
+              <span class="rating"><span class="rating-star">★</span> <span class="rating-value">${skill.rating_avg ? skill.rating_avg.toFixed(1) : 'N/A'}</span></span>
               <a href="{{ route('skill-details') }}?id=${skill.id}" class="btn btn-sm btn-primary">View Details</a>
             </div>
           </div>
@@ -199,7 +306,17 @@
       if (categoryParam) {
         const categorySelect = document.getElementById("browse-category");
         if (categorySelect) {
-          categorySelect.value = categoryParam;
+          // Category can be ID or name. Prefer matching by ID; fallback to name match.
+          if (/^\d+$/.test(categoryParam)) {
+            categorySelect.value = categoryParam;
+          } else {
+            const normalized = categoryParam.trim().toLowerCase();
+            const match = Array.from(categorySelect.options).find(opt => {
+              const optName = (opt.dataset?.name || opt.textContent || '').trim().toLowerCase();
+              return optName === normalized;
+            });
+            if (match) categorySelect.value = match.value;
+          }
         }
       }
       
@@ -212,9 +329,42 @@
       }
     }
 
+    async function loadBrowseCategories() {
+      const categorySelect = document.getElementById("browse-category");
+      if (!categorySelect) return;
+
+      try {
+        const categories = await apiClient.listCategories();
+        if (!Array.isArray(categories) || categories.length === 0) return;
+
+        // Keep the "All" option, then append categories from DB
+        const allOption = categorySelect.querySelector('option[value=""]');
+        categorySelect.innerHTML = '';
+        if (allOption) categorySelect.appendChild(allOption);
+        else {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'All';
+          categorySelect.appendChild(opt);
+        }
+
+        categories.forEach(cat => {
+          if (!cat || cat.id == null) return;
+          const opt = document.createElement('option');
+          opt.value = String(cat.id);
+          opt.textContent = cat.name ?? `Category #${cat.id}`;
+          opt.dataset.name = String(cat.name ?? '');
+          categorySelect.appendChild(opt);
+        });
+      } catch (err) {
+        console.error("Error loading categories:", err);
+      }
+    }
+
     // Load initial skills
-    window.addEventListener('DOMContentLoaded', () => {
-      // Check for URL parameters first
+    window.addEventListener('DOMContentLoaded', async () => {
+      await loadBrowseCategories();
+      // Check for URL parameters after categories are populated
       checkUrlParameters();
       // Then apply filters (which will use the parameters from URL if set)
       applyBrowseFilters();

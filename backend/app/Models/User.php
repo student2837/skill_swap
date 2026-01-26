@@ -27,6 +27,7 @@ class User extends Authenticatable
         'credits',
         'rating_avg',
         'is_admin',
+        'is_verified',
         'email_verified_at',
     ];
 
@@ -51,6 +52,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'is_verified' => 'boolean',
             'rating_avg' => 'float',
 
         ];

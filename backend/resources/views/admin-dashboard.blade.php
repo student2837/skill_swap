@@ -58,6 +58,37 @@
       display: flex;
       gap: 0.5rem;
     }
+    /* Users table: Actions column */
+    .user-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.45rem;
+      width: 120px;
+      margin: 0 auto;
+    }
+    .user-actions .btn-sm {
+      width: 100%;
+      justify-content: center;
+      padding: 0.42rem 0.9rem;
+      line-height: 1.1;
+    }
+    /* Users table: vertical scroll only (no horizontal) */
+    .users-table-wrapper {
+      overflow-y: auto;
+      overflow-x: hidden;
+      max-height: 65vh;
+    }
+    /* Users table: make ID column smaller */
+    #tab-users .request-table th:nth-child(1),
+    #tab-users .request-table td:nth-child(1) {
+      width: 52px;
+      min-width: 52px;
+      max-width: 52px;
+      padding-left: 0.4rem;
+      padding-right: 0.4rem;
+      font-variant-numeric: tabular-nums;
+    }
     .btn-sm {
       padding: 0.4rem 0.8rem;
       font-size: 0.875rem;
@@ -108,37 +139,31 @@
       border-radius: var(--radius);
       margin-bottom: 0.5rem;
     }
+    .sidebar-footer .logout-btn {
+      transition: all 0.3s ease;
+    }
+    .sidebar-footer .logout-btn:hover {
+      background: rgba(239, 68, 68, 0.35);
+      color: #fff;
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.6),
+                  0 0 40px rgba(239, 68, 68, 0.4),
+                  0 0 60px rgba(239, 68, 68, 0.2);
+      transform: translateY(-1px);
+    }
   </style>
 @endpush
 
 @section('content')
   <div class="dashboard-bg"></div>
 
-  <!-- Sidebar -->
-  <aside class="sidebar glass">
-    <div class="sidebar-logo-wrap">
-      <img src="{{ asset('assets/logo.png') }}" class="sidebar-logo-img" />
-    </div>
-
-    <nav class="sidebar-nav">
-      <a href="{{ route('admin.dashboard') }}" class="nav-item active">⚙️ Admin Panel</a>
-      <a href="{{ route('browse') }}" class="nav-item">🔍 Browse Skills</a>
-      <a href="{{ route('messages') }}" class="nav-item">💬 Messages</a>
-      <a href="{{ route('profile') }}" class="nav-item">👤 Profile</a>
-    </nav>
-
-    <div class="sidebar-footer">
-      <a href="{{ route('login') }}" class="logout-btn">🚪 Logout</a>
-    </div>
-  </aside>
+  @include('components.user-sidebar')
+  @include('components.admin-sidebar')
+  @include('components.sidebar-init')
 
   <!-- Main -->
   <main class="main-content">
     <header class="topbar glass">
       <h2>Admin Dashboard <span class="admin-badge">ADMIN</span></h2>
-      <div class="topbar-actions">
-        <button class="btn-primary" onclick="refreshAll()"> Refresh All</button>
-      </div>
     </header>
 
     <!-- Tabs -->
@@ -156,7 +181,7 @@
           <h3>All Users</h3>
           <p class="muted" id="usersCount">Loading...</p>
         </div>
-        <div style="overflow-x: auto;">
+        <div class="users-table-wrapper">
           <table class="request-table">
             <thead>
               <tr>
@@ -164,6 +189,8 @@
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Skills</th>
+                <th>Students</th>
                 <th>Credits</th>
                 <th>Rating</th>
                 <th>Joined</th>
@@ -171,7 +198,7 @@
               </tr>
             </thead>
             <tbody id="usersTableBody">
-              <tr><td colspan="8">Loading...</td></tr>
+              <tr><td colspan="10">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -318,19 +345,34 @@
         
         tbody.innerHTML = users.map(user => {
           const isCurrentAdmin = user.id === window.currentAdminId;
+          const createdAt = user.created_at ? new Date(user.created_at) : null;
+          const isNewUser = createdAt ? ((Date.now() - createdAt.getTime()) <= (3 * 24 * 60 * 60 * 1000)) : false;
           return `
             <tr>
               <td>${user.id}</td>
-              <td>${user.name || 'N/A'}</td>
+              <td>${user.name || 'N/A'}${user.is_verified ? ' <span title="Verified" style="color:#3b82f6;font-weight:700;">✓</span>' : ''}${isNewUser ? ' <span class="tag tag-green" title="New user" style="margin-left:8px; font-size:0.7rem; padding:0.2rem 0.55rem;">NEW</span>' : ''}</td>
               <td>${user.email}</td>
               <td><span class="admin-badge ${user.is_admin ? 'admin' : 'user'}">${user.is_admin ? 'Admin' : 'User'}</span></td>
+              <td>${user.skills_count ?? 0}</td>
+              <td>${user.students_taught_count ?? 0}</td>
               <td>${user.credits || 0}</td>
               <td>${user.rating_avg ? user.rating_avg.toFixed(1) : 'N/A'}</td>
               <td>${new Date(user.created_at).toLocaleDateString()}</td>
               <td>
                 ${isCurrentAdmin 
                   ? '<span style="color: var(--text-muted);">—</span>' 
-                  : `<button class="btn-danger btn-sm" onclick="deleteUserById(${user.id}, '${(user.name || user.email).replace(/'/g, "\\'")}')">Delete</button>`
+                  : `
+                    <div class="user-actions">
+                      <button class="btn-primary btn-sm" style="background: rgba(99,102,241,0.22); border: 1px solid rgba(99,102,241,0.9); color: #e0e7ff; box-shadow: 0 10px 25px rgba(99,102,241,0.22);" onclick="messageUser(${user.id}, '${(user.name || user.email).replace(/'/g, "\\'")}')">Message</button>
+                      <button
+                        class="btn-primary btn-sm"
+                        style="background: rgba(59,130,246,0.22); border: 1px solid rgba(59,130,246,0.9); color: #bfdbfe; box-shadow: 0 10px 25px rgba(59,130,246,0.25);"
+                        title="${user.is_verified ? 'Remove verification' : 'Verify user'}"
+                        onclick="setUserVerified(${user.id}, ${user.is_verified ? 'false' : 'true'})"
+                      >✓</button>
+                      <button class="btn-primary btn-sm" style="background: linear-gradient(120deg, #dc2626, #ef4444); box-shadow: 0 10px 25px rgba(220, 38, 38, 0.55);" onclick="deleteUserById(${user.id}, '${(user.name || user.email).replace(/'/g, "\\'")}')">Delete</button>
+                    </div>
+                  `
                 }
               </td>
             </tr>
@@ -338,7 +380,22 @@
         }).join('');
       } catch (err) {
         console.error("Error loading users:", err);
-        document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="8">Error loading users</td></tr>';
+        document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="10">Error loading users</td></tr>';
+      }
+    }
+
+    async function messageUser(userId, userName) {
+      try {
+        // Create/get conversation then redirect to Messages and open it
+        const conversation = await apiClient.createConversation(userId);
+        const conversationId = conversation?.id;
+        if (!conversationId) {
+          throw new Error('Failed to start conversation');
+        }
+        window.location.href = `{{ route('messages') }}?conversation_id=${conversationId}&user=${encodeURIComponent(userName || '')}`;
+      } catch (err) {
+        console.error("Error creating conversation:", err);
+        alert('Error starting conversation: ' + (err.message || 'Unknown error'));
       }
     }
 
@@ -354,6 +411,16 @@
       } catch (err) {
         alert('Error deleting user: ' + (err.message || err.error || 'Unknown error'));
         console.error("Error deleting user:", err);
+      }
+    }
+
+    async function setUserVerified(userId, isVerified) {
+      try {
+        await apiClient.setUserVerified(userId, isVerified);
+        loadUsers();
+      } catch (err) {
+        alert('Error updating verification: ' + (err.message || err.error || 'Unknown error'));
+        console.error("Error updating verification:", err);
       }
     }
 
@@ -414,7 +481,7 @@
       }
     }
 
-    async function loadCategories() {
+    async function image.pngmake loadCategories() {
       try {
         const categories = await apiClient.listCategories();
         const container = document.getElementById('categoriesList');
@@ -429,7 +496,7 @@
           return `
           <div class="category-item">
             <span>${categoryName}</span>
-            <button class="btn-danger btn-sm" data-category-id="${cat.id}" data-category-name="${categoryName.replace(/"/g, '&quot;')}">Delete</button>
+            <button class="btn-primary btn-sm" style="background: linear-gradient(120deg, #dc2626, #ef4444); box-shadow: 0 10px 25px rgba(220, 38, 38, 0.55);" data-category-id="${cat.id}" data-category-name="${categoryName.replace(/"/g, '&quot;')}">Delete</button>
           </div>
         `;
         }).join('');
@@ -547,11 +614,10 @@
       }
     }
 
-    async function refreshAll() {
-      await loadTabData(currentTab);
-    }
-
     // Load initial data
-    loadUsers();
+    checkAdmin().then(() => {
+      loadTabData(currentTab);
+    });
+
   </script>
 @endpush

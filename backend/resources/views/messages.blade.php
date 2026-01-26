@@ -9,12 +9,34 @@
 @section('content')
   <div class="dashboard-bg"></div>
 
-  @include('components.sidebar')
+  @include('components.user-sidebar')
+  @include('components.admin-sidebar')
+  <script>
+    // Hide sidebar on messages page
+    (function() {
+      const userSidebar = document.getElementById('userSidebarComponent');
+      const adminSidebar = document.getElementById('adminSidebarComponent');
+      if (userSidebar) userSidebar.style.display = 'none';
+      if (adminSidebar) adminSidebar.style.display = 'none';
+      
+      // Make main content full width
+      const mainContent = document.querySelector('.main-content');
+      if (mainContent) {
+        mainContent.style.marginLeft = '0';
+        mainContent.style.width = '100%';
+      }
+    })();
+  </script>
 
   <!-- Main -->
   <main class="main-content">
     <header class="topbar glass">
-      <h2>Messages</h2>
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <a href="#" class="back-button" id="backButton" style="margin: 0;" onclick="event.preventDefault(); goBack();">
+          ←
+        </a>
+        <h2 style="margin: 0;">Messages</h2>
+      </div>
     </header>
 
     <section>
@@ -81,12 +103,50 @@
       apiClient.setToken(token);
     }
 
-    // Filter sidebar navigation for admins
-    filterSidebarForAdmin(apiClient);
+    // Set back button destination based on user role
+    async function goBack() {
+      try {
+        if (apiClient.isAuthenticated()) {
+          const user = await apiClient.getUser();
+          if (user.is_admin) {
+            window.location.href = "{{ route('admin.dashboard') }}";
+          } else {
+            window.location.href = "{{ route('dashboard') }}";
+          }
+        } else {
+          window.location.href = "{{ route('dashboard') }}";
+        }
+      } catch (err) {
+        console.error("Error checking user for back button:", err);
+        window.location.href = "{{ route('dashboard') }}";
+      }
+    }
 
     let currentUser = null;
     let currentConversationId = null;
     let refreshInterval = null;
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialConversationId = parseInt(urlParams.get('conversation_id') || '', 10) || null;
+    const initialUserName = urlParams.get('user') ? decodeURIComponent(urlParams.get('user')) : null;
+    
+    function setThreadHeader(userName, isAdmin = false) {
+      const titleEl = document.getElementById('threadUserName');
+      if (!titleEl) return;
+      titleEl.textContent = userName || '—';
+      
+      // remove old badge if any
+      const old = document.getElementById('threadAdminBadge');
+      if (old) old.remove();
+      
+      if (isAdmin) {
+        const badge = document.createElement('span');
+        badge.id = 'threadAdminBadge';
+        badge.className = 'tag tag-blue';
+        badge.textContent = 'Admin';
+        badge.style.cssText = 'margin-left: 0.6rem; font-size: 0.72rem; padding: 0.2rem 0.55rem; vertical-align: middle;';
+        titleEl.insertAdjacentElement('afterend', badge);
+      }
+    }
 
     // Load current user
     async function loadCurrentUser() {
@@ -142,6 +202,9 @@
             ? (latestMsg.content.length > 40 ? latestMsg.content.substring(0, 40) + '...' : latestMsg.content)
             : 'No messages yet';
           const time = latestMsg ? formatTime(latestMsg.created_at) : '';
+          const adminBadge = conv.other_user?.is_admin
+            ? `<span class="tag tag-blue" style="font-size:0.7rem; padding:0.18rem 0.5rem;">Admin</span>`
+            : '';
           const unreadBadge = conv.unread_count > 0 
             ? `<span class="unread-badge">${conv.unread_count}</span>` 
             : '';
@@ -150,11 +213,13 @@
           return `
             <div class="message-item ${isActive}" 
                  data-conversation-id="${conv.id}"
-                 data-user-name="${conv.other_user.name.replace(/"/g, '&quot;')}">
+                 data-user-name="${conv.other_user.name.replace(/"/g, '&quot;')}"
+                 data-user-is-admin="${conv.other_user?.is_admin ? '1' : '0'}">
               <div class="avatar">${initials}</div>
               <div style="flex: 1; min-width: 0;">
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
                   <p class="msg-sender">${conv.other_user.name}</p>
+                  ${adminBadge}
                   ${unreadBadge}
                 </div>
                 <p class="msg-text">${preview}</p>
@@ -169,7 +234,8 @@
           item.addEventListener('click', function() {
             const conversationId = parseInt(this.getAttribute('data-conversation-id'));
             const userName = this.getAttribute('data-user-name');
-            selectConversation(conversationId, userName, this);
+            const isAdmin = this.getAttribute('data-user-is-admin') === '1';
+            selectConversation(conversationId, userName, this, isAdmin);
           });
         });
       } catch (err) {
@@ -179,7 +245,7 @@
     }
 
     // Select a conversation
-    async function selectConversation(conversationId, userName, clickedElement) {
+    async function selectConversation(conversationId, userName, clickedElement, isAdmin = false) {
       currentConversationId = conversationId;
       
       // Hide conversation list and show chat window
@@ -198,7 +264,7 @@
       document.getElementById('chatWindow').style.flexDirection = 'column';
       
       // Update UI
-      document.getElementById('threadUserName').textContent = userName;
+      setThreadHeader(userName, isAdmin);
       document.getElementById('threadSubtitle').textContent = 'Active now';
       
       // Enable message form
@@ -367,6 +433,19 @@
     window.addEventListener('DOMContentLoaded', async () => {
       await loadCurrentUser();
       await loadConversations();
+      
+      // If we were redirected here from admin "Message" button, open the conversation directly
+      if (initialConversationId) {
+        try {
+          const response = await apiClient.getConversation(initialConversationId);
+          const otherUser = response?.conversation?.other_user;
+          const otherName = initialUserName || otherUser?.name || 'Conversation';
+          const otherIsAdmin = !!otherUser?.is_admin;
+          await selectConversation(initialConversationId, otherName, null, otherIsAdmin);
+        } catch (err) {
+          console.error('Error opening initial conversation:', err);
+        }
+      }
     });
 
     // Cleanup on page unload

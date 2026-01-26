@@ -24,7 +24,11 @@ class ConversationController extends Controller
 
             $conversations = Conversation::where('user_one_id', $user->id)
                 ->orWhere('user_two_id', $user->id)
-                ->with(['userOne:id,name,email', 'userTwo:id,name,email', 'latestMessage.fromUser:id,name'])
+                ->with([
+                    'userOne:id,name,email,is_admin',
+                    'userTwo:id,name,email,is_admin',
+                    'latestMessage.fromUser:id,name,is_admin'
+                ])
                 ->withCount(['messages as unread_count' => function ($query) use ($user) {
                     $query->where('to_user_id', $user->id)
                           ->whereNull('read_at');
@@ -41,6 +45,7 @@ class ConversationController extends Controller
                             'id' => $otherUser->id,
                             'name' => $otherUser->name,
                             'email' => $otherUser->email,
+                            'is_admin' => (bool) ($otherUser->is_admin ?? false),
                         ],
                         'latest_message' => $latestMessage ? [
                             'id' => $latestMessage->id,
@@ -74,7 +79,7 @@ class ConversationController extends Controller
                 return response()->json(['error' => 'Unauthenticated'], 401);
             }
 
-            $conversation = Conversation::with(['userOne:id,name,email', 'userTwo:id,name,email'])
+            $conversation = Conversation::with(['userOne:id,name,email,is_admin', 'userTwo:id,name,email,is_admin'])
                 ->find($conversationId);
 
             if (!$conversation) {
@@ -112,6 +117,7 @@ class ConversationController extends Controller
                         'id' => $otherUser->id,
                         'name' => $otherUser->name,
                         'email' => $otherUser->email,
+                        'is_admin' => (bool) ($otherUser->is_admin ?? false),
                     ],
                 ],
                 'messages' => $messages
@@ -161,6 +167,7 @@ class ConversationController extends Controller
                         'id' => $otherUser->id,
                         'name' => $otherUser->name,
                         'email' => $otherUser->email,
+                        'is_admin' => (bool) ($otherUser->is_admin ?? false),
                     ],
                 ]
             ], 201);

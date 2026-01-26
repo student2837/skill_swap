@@ -18,16 +18,19 @@
 
       <nav class="nav-links">
         <a href="{{ route('browse') }}">Browse Skills</a>
-        <a href="#how-it-works">How it Works</a>
+        <a href="#how-it-works" onclick="event.preventDefault(); scrollToCreditSystem();">How it Works</a>
         <a href="#categories">Categories</a>
       </nav>
 
       <div class="nav-actions">
         <div class="search-wrapper">
           <input
-            type="text"
+            type="search"
             id="nav-search"
+            name="search"
             placeholder="Search skills…"
+            autocomplete="off"
+            role="searchbox"
           />
           <button
             class="icon-button"
@@ -38,7 +41,7 @@
           </button>
         </div>
 
-        <a href="{{ route('login') }}" class="nav-link-small">Log in</a>
+        <a href="{{ route('login') }}" class="btn btn-sm btn-white">Log in</a>
         <a href="{{ route('register') }}" class="btn btn-sm btn-primary">
           Join Now
         </a>
@@ -70,7 +73,7 @@
             <a href="{{ route('register') }}" class="btn btn-primary">
               Become a Teacher
             </a>
-            <a href="{{ route('browse') }}" class="btn btn-ghost">
+            <a href="{{ route('browse') }}" class="btn btn-sm btn-white">
               Browse Skills
             </a>
           </div>
@@ -83,10 +86,6 @@
             <div>
               <span class="hero-meta-number">980+</span>
               <span class="hero-meta-label">Skills available</span>
-            </div>
-            <div>
-              <span class="hero-meta-number">4.9★</span>
-              <span class="hero-meta-label">Average rating</span>
             </div>
           </div>
         </div>
@@ -142,12 +141,6 @@
 
           <div class="hero-panel-footer">
             <p>Teach once, learn forever.</p>
-            <button
-              class="btn btn-sm btn-secondary js-show-toast"
-              data-toast-message="Free credits promo coming soon."
-            >
-              Start with 10 free credits
-            </button>
           </div>
         </div>
       </div>
@@ -156,7 +149,7 @@
     <section class="section section-split" id="how-it-works">
       <div class="container section-split-grid">
         <div>
-          <h2>How the credit system works</h2>
+          <h2 id="credit-system-title">How the credit system works</h2>
           <p class="section-subtitle">
             Credits are the internal currency of SkillSwap. You can buy them, earn them by teaching, or cash them out as money.
           </p>
@@ -268,6 +261,47 @@
   <script src="{{ asset('js/app.js') }}"></script>
   <script src="{{ asset('js/api-client.js') }}"></script>
   <script>
+    // Load statistics (user count and skills count)
+    async function loadStatistics() {
+      try {
+        const API = "{{ url('/api') }}";
+        const apiClient = new ApiClient(API);
+        
+        const stats = await apiClient.getStatistics();
+        
+        console.log('Statistics loaded:', stats); // Debug log
+        
+        if (stats && (stats.total_users !== undefined || stats.active_skills !== undefined)) {
+          // Format numbers
+          const formatNumber = (num) => {
+            if (num >= 1000) {
+              return (num / 1000).toFixed(1) + 'k+';
+            }
+            return num + '+';
+          };
+          
+          // Update active learners (first hero-meta-number)
+          const heroMetaNumbers = document.querySelectorAll('.hero-meta-number');
+          console.log('Found hero-meta-number elements:', heroMetaNumbers.length); // Debug log
+          
+          if (heroMetaNumbers.length >= 2) {
+            if (stats.total_users !== undefined) {
+              heroMetaNumbers[0].textContent = formatNumber(stats.total_users);
+              console.log('Updated active learners:', formatNumber(stats.total_users)); // Debug log
+            }
+            // Update skills available (second hero-meta-number)
+            if (stats.active_skills !== undefined) {
+              heroMetaNumbers[1].textContent = formatNumber(stats.active_skills);
+              console.log('Updated skills available:', formatNumber(stats.active_skills)); // Debug log
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading statistics:', err);
+        // Keep default values if error
+      }
+    }
+
     // Load top skills for live marketplace
     async function loadTopSkills() {
       try {
@@ -281,9 +315,12 @@
         // Fetch all active skills
         const skills = await apiClient.listAllSkills();
 
+        const heroSkillList = document.querySelector('.hero-skill-list');
+        if (!heroSkillList) return;
+
+        // If no skills in database, keep the default placeholder data
         if (!skills || !skills.length) {
-          // If no skills, keep the default fake skills
-          return;
+          return; // Keep the default HTML skills
         }
 
         // Sort skills by rating (highest first), then by students count (most first)
@@ -299,32 +336,45 @@
           })
           .slice(0, 3); // Get top 3
 
+        // If no skills with ratings, try to show any skills (without rating filter)
+        let skillsToShow = sortedSkills;
         if (sortedSkills.length === 0) {
-          // If no skills with ratings, keep default
-          return;
+          // Show top 3 skills by students count or most recent
+          skillsToShow = skills
+            .sort((a, b) => (b.students_count || 0) - (a.students_count || 0))
+            .slice(0, 3);
         }
 
-        // Update the hero skill list
-        const heroSkillList = document.querySelector('.hero-skill-list');
-        if (heroSkillList) {
-          heroSkillList.innerHTML = sortedSkills.map(skill => `
+        // If still no skills, keep default placeholder data
+        if (skillsToShow.length === 0) {
+          return; // Keep the default HTML skills
+        }
+
+        // Update the hero skill list with real data
+        heroSkillList.innerHTML = skillsToShow.map(skill => {
+          const teacherName = skill.user?.name || 'Unknown teacher';
+          const studentsCount = skill.students_count || 0;
+          const rating = skill.rating_avg ? skill.rating_avg.toFixed(1) : 'N/A';
+          const price = skill.price || 0;
+          
+          return `
             <li class="hero-skill-item">
               <div>
                 <p class="hero-skill-name">${skill.title || 'Untitled'}</p>
                 <p class="hero-skill-teacher">
-                  ${skill.user?.name || 'Unknown teacher'} • ${skill.students_count || 0} ${(skill.students_count || 0) === 1 ? 'student' : 'students'}
+                  ${teacherName} • ${studentsCount} ${studentsCount === 1 ? 'student' : 'students'}
                 </p>
               </div>
               <div class="hero-skill-meta">
-                <span class="chip chip-soft">${skill.price || 0} credits</span>
-                <span class="rating">★ ${skill.rating_avg ? skill.rating_avg.toFixed(1) : 'N/A'}</span>
+                <span class="chip chip-soft">${price} credits</span>
+                <span class="rating">★ ${rating}</span>
               </div>
             </li>
-          `).join('');
-        }
+          `;
+        }).join('');
       } catch (err) {
         console.error('Error loading top skills:', err);
-        // If error, keep the default fake skills
+        // If error, keep the default placeholder skills
       }
     }
 
@@ -339,8 +389,46 @@
       }
     }
 
-    // Load skills when page loads
+    // Smooth scroll to credit system section
+    function scrollToCreditSystem() {
+      const element = document.getElementById('credit-system-title');
+      if (element) {
+        // Get header height to account for sticky navigation
+        const header = document.querySelector('.site-header');
+        const headerHeight = header ? header.offsetHeight + 20 : 120; // Add extra padding
+        const elementPosition = element.getBoundingClientRect().top;
+        const offsetPosition = elementPosition + window.pageYOffset - headerHeight;
+
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: 'smooth'
+        });
+      } else {
+        // Fallback to section if title not found
+        const section = document.getElementById('how-it-works');
+        if (section) {
+          const header = document.querySelector('.site-header');
+          const headerHeight = header ? header.offsetHeight + 20 : 120;
+          const sectionPosition = section.getBoundingClientRect().top;
+          const offsetPosition = sectionPosition + window.pageYOffset - headerHeight;
+          
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: 'smooth'
+          });
+        }
+      }
+    }
+
+    // Handle hash navigation on page load
     window.addEventListener('DOMContentLoaded', () => {
+      // Check if URL has #how-it-works hash
+      if (window.location.hash === '#how-it-works') {
+        setTimeout(() => {
+          scrollToCreditSystem();
+        }, 100);
+      }
+
       const searchInput = document.getElementById('nav-search');
       if (searchInput) {
         searchInput.addEventListener('keydown', (e) => {
@@ -351,6 +439,7 @@
       }
       
       loadTopSkills();
+      loadStatistics();
     });
   </script>
 @endpush
