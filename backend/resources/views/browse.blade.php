@@ -61,6 +61,14 @@
     #browseSkillsGrid .skill-card-teacher::before {
       display: none;
     }
+    #browseSkillsGrid .skill-card-teacher .verified-check {
+      display: inline-block;
+      margin-left: 0.3rem;
+      color: #3b82f6;
+      font-weight: 700;
+      font-size: 1rem;
+      vertical-align: middle;
+    }
     #browseSkillsGrid .skill-card-desc {
       margin: 0 !important;
       margin-top: 0.5rem !important;
@@ -282,7 +290,7 @@
               <h3>${skill.title || skill.skill_name || 'Untitled'}</h3>
               <span class="chip chip-soft">${skill.price || skill.credits || 0} credits</span>
             </div>
-            <p class="skill-card-teacher">${skill.user?.name || skill.user_name || 'Unknown teacher'}</p>
+            <p class="skill-card-teacher">${skill.user?.name || skill.user_name || 'Unknown teacher'}${(skill.user?.is_verified || skill.is_verified) ? '<span class="verified-check">✓</span>' : ''}</p>
             <p class="skill-card-desc">${skill.shortDesc || skill.description || 'No description available.'}</p>
             <div class="skill-card-footer">
               <span class="rating"><span class="rating-star">★</span> <span class="rating-value">${skill.rating_avg ? skill.rating_avg.toFixed(1) : 'N/A'}</span></span>
