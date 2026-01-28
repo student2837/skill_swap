@@ -74,6 +74,7 @@
             id="skillLearn"
             rows="4"
             placeholder="One outcome per line"
+            required
           ></textarea>
         </label>
 
@@ -198,6 +199,12 @@
         return;
       }
 
+      // Validation: what you'll learn is required
+      if (!whatYoullLearn) {
+        alert("Please add what you'll learn");
+        return;
+      }
+
       try {
         const skillData = {
           title: title,
@@ -211,9 +218,7 @@
           skillData.shortDesc = shortDesc;
         }
         
-        if (whatYoullLearn) {
-          skillData.what_youll_learn = whatYoullLearn;
-        }
+        skillData.what_youll_learn = whatYoullLearn;
 
         const skill = await apiClient.createSkill(skillData);
 

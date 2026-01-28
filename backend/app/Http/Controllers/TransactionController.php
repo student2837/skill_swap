@@ -73,14 +73,14 @@ class TransactionController extends Controller
                 ->latest()
                 ->get();
 
-            // Calculate current balance from user's credits
-            $currentBalance = $user->credits ?? 0;
+            $lockedCredits = (int) ($user->locked_credits ?? 0);
+            $currentBalance = (int) ($user->credits ?? 0) - $lockedCredits;
+            if ($currentBalance < 0) {
+                $currentBalance = 0;
+            }
 
-            // Calculate pending cashout (sum of pending cashout transactions)
-            $pendingCashout = Transaction::where('user_id', $userId)
-                ->where('type', 'cashout')
-                ->where('status', 'pending')
-                ->sum('amount');
+            // Pending cashout is the currently locked credits
+            $pendingCashout = $lockedCredits;
 
             // Calculate taught this month (skill_earning transactions this month)
             $startOfMonth = now()->startOfMonth();
@@ -123,6 +123,7 @@ class TransactionController extends Controller
                 'transactions' => $transactionsWithBalance,
                 'balance' => $currentBalance,
                 'pending_cashout' => $pendingCashout,
+                'locked_credits' => $lockedCredits,
                 'taught_this_month' => $taughtThisMonth,
                 'learned_this_month' => $learnedThisMonth
             ], 200);

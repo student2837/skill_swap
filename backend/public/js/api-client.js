@@ -842,10 +842,11 @@ class ApiClient {
     /**
      * Request a payout
      * @param {number} amount - Payout amount
+     * @param {number} payoutMethodId - Selected payout method id
      * @returns {Promise<Object>} Created payout request
      */
-    async requestPayout(amount) {
-        const response = await this.post('/payouts', { amount });
+    async requestPayout(amount, payoutMethodId) {
+        const response = await this.post('/payouts', { amount, payout_method_id: payoutMethodId });
         return response.payout;
     }
 
@@ -856,6 +857,43 @@ class ApiClient {
     async getUserPayouts() {
         const response = await this.get('/payouts');
         return response.payouts;
+    }
+
+    /**
+     * List payout methods for current user
+     * @returns {Promise<Array>} List of payout methods
+     */
+    async listPayoutMethods() {
+        const response = await this.get('/payout-methods');
+        return response.methods;
+    }
+
+    /**
+     * Create payout method
+     * @param {Object} data - Payout method data
+     * @returns {Promise<Object>} Created payout method
+     */
+    async createPayoutMethod(data) {
+        const response = await this.post('/payout-methods', data);
+        return response.method;
+    }
+
+    /**
+     * Set default payout method
+     * @param {number} id - Payout method ID
+     * @returns {Promise<void>}
+     */
+    async setDefaultPayoutMethod(id) {
+        await this.put(`/payout-methods/${id}/default`);
+    }
+
+    /**
+     * Delete payout method
+     * @param {number} id - Payout method ID
+     * @returns {Promise<void>}
+     */
+    async deletePayoutMethod(id) {
+        await this.delete(`/payout-methods/${id}`);
     }
 
     /**

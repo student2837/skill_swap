@@ -212,7 +212,7 @@
             </div>
             ${hasFee ? `
             <div class="payout-amount-row">
-              <span class="label">Platform fee (20%):</span>
+              <span class="label">Platform fee ({{ (int) (config('payments.cashout_fee_rate', 0.2) * 100) }}%):</span>
               <span class="value">-${feeAmount} credits</span>
             </div>
             ` : ''}

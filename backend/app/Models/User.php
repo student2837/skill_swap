@@ -25,6 +25,7 @@ class User extends Authenticatable
         'bio',
         'profile_pic',
         'credits',
+        'locked_credits',
         'rating_avg',
         'is_admin',
         'is_verified',
@@ -99,6 +100,11 @@ public function transactions()
 public function payouts()
 {
     return $this->hasMany(Payout::class);
+}
+
+public function payoutMethods()
+{
+    return $this->hasMany(UserPayoutMethod::class);
 }
 
 //this two is optional

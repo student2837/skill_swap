@@ -5,6 +5,7 @@ use App\Models\SkillRequest;
 use App\Models\Skill;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\WalletService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -77,7 +78,10 @@ class RequestController extends Controller
             // Ensure student has enough credits before creating the request
             // (Skill details UI will redirect to buy credits on this error.)
             $skillPrice = (int) ($skill->price ?? 0);
-            $userCredits = (int) ($user->credits ?? 0);
+            $userCredits = (int) ($user->credits ?? 0) - (int) ($user->locked_credits ?? 0);
+            if ($userCredits < 0) {
+                $userCredits = 0;
+            }
             if ($skillPrice > 0 && $userCredits < $skillPrice) {
                 DB::rollBack();
                 return response()->json([
@@ -141,7 +145,11 @@ class RequestController extends Controller
             $creditAmount = $skill->price;
 
             // Check if student has enough credits
-            if ($student->credits < $creditAmount) {
+            $availableCredits = (int) ($student->credits ?? 0) - (int) ($student->locked_credits ?? 0);
+            if ($availableCredits < 0) {
+                $availableCredits = 0;
+            }
+            if ($availableCredits < $creditAmount) {
                 return response()->json(['error' => 'Student does not have enough credits'], 400);
             }
 
@@ -149,8 +157,8 @@ class RequestController extends Controller
             DB::beginTransaction();
 
             try {
-                // Deduct credits from student
-                $student->decrement('credits', $creditAmount);
+                // Deduct credits from student (respect locked credits)
+                app(WalletService::class)->debitCredits($student->id, $creditAmount);
                 
                 // Add credits to teacher
                 $teacher->increment('credits', $creditAmount);

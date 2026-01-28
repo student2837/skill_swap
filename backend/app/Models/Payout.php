@@ -11,6 +11,7 @@ class Payout extends Model
 
     protected $fillable = [
         'user_id',
+        'payout_method_id',
         'amount',
         'gross_amount',
         'fee_amount',
@@ -22,6 +23,7 @@ class Payout extends Model
         'status',
         'admin_note',
         'approved_at',
+        'approved_by',
         'processed_at',
         'failure_code',
         'failure_message',
@@ -48,5 +50,10 @@ class Payout extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function payoutMethod()
+    {
+        return $this->belongsTo(UserPayoutMethod::class, 'payout_method_id');
     }
 }

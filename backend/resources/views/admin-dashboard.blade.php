@@ -93,6 +93,9 @@
       padding: 0.4rem 0.8rem;
       font-size: 0.875rem;
     }
+    .action-buttons .btn-sm {
+      border-radius: 999px !important;
+    }
     .btn-success {
       background: rgba(96, 165, 250, 0.15);
       color: #ffffff;

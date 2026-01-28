@@ -28,6 +28,53 @@
     .muted {
       margin-bottom: 0.75rem !important;
     }
+    .profile-form {
+      align-items: stretch;
+      text-align: left;
+    }
+    .profile-form .payout-default-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 0.6rem;
+      margin: 0.25rem 0 0.75rem;
+      color: rgba(226, 232, 240, 0.9);
+      font-size: 0.9rem;
+      align-self: flex-start;
+      width: 100%;
+      text-align: left;
+      padding-left: 0;
+      flex-direction: row;
+    }
+    .profile-form .payout-default-row span {
+      margin: 0;
+    }
+    .payout-default-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      appearance: none;
+      border: 2px solid rgba(148, 163, 184, 0.5);
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.6);
+      cursor: pointer;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+    .payout-default-row input[type="checkbox"]:checked {
+      background: linear-gradient(120deg, var(--primary), var(--accent));
+      border-color: transparent;
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.3);
+    }
+    .payout-default-row input[type="checkbox"]:checked::after {
+      content: '✓';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -52%);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+    }
   </style>
 @endpush
 
@@ -56,13 +103,53 @@
         Available balance: <strong id="adminBalance">—</strong> credits
       </div>
 
-      <label class="filter-label">
-        <span>Amount (credits)</span>
-        <div class="credit-input-wrapper">
-          <input id="amount" type="text" class="credit-input" placeholder="0" inputmode="numeric" pattern="[0-9]*" autocomplete="off" />
-          <span class="credit-input-suffix">credits</span>
+      <div class="profile-form">
+        <label class="filter-label">
+          <span>Amount (credits)</span>
+          <div class="credit-input-wrapper">
+            <input id="amount" type="text" class="credit-input" placeholder="0" inputmode="numeric" pattern="[0-9]*" autocomplete="off" />
+            <span class="credit-input-suffix">credits</span>
+          </div>
+        </label>
+
+        <label class="filter-label">
+          <span>Payout method</span>
+          <select id="payoutMethodSelect" required>
+            <option value="">Select a payout method</option>
+          </select>
+        </label>
+        <div class="muted" style="margin-bottom:0.75rem;">
+          <button class="btn-small" id="togglePayoutMethodForm" type="button">Add payout method</button>
         </div>
-      </label>
+
+        <div id="payoutMethodForm" style="display:none; margin-bottom: 0.75rem;">
+          <label class="filter-label">
+            <span>Provider</span>
+            <select id="payoutProvider" required>
+              <option value="manual">Bank transfer (manual)</option>
+              <option value="paypal">PayPal</option>
+            </select>
+          </label>
+          <label class="filter-label">
+            <span>Label</span>
+            <input id="payoutLabel" type="text" placeholder="e.g. Platform bank account" required />
+          </label>
+          <label class="filter-label">
+            <span id="payoutReferenceLabel">Account reference</span>
+            <input id="payoutReference" type="text" placeholder="Reference or email" required />
+          </label>
+          <label class="filter-label">
+            <span>Last 4 (optional)</span>
+            <input id="payoutLast4" type="text" maxlength="4" placeholder="1234" inputmode="numeric" pattern="[0-9]{4}" />
+          </label>
+        <label class="payout-default-row">
+            <input type="checkbox" id="payoutDefault" />
+            <span>Set as default</span>
+          </label>
+          <button class="btn-small" id="savePayoutMethodBtn" type="button">Save payout method</button>
+          <p class="muted" id="payoutMethodError" style="margin-top:0.5rem;"></p>
+        </div>
+      </div>
 
       <div class="kv" style="margin-top: 0.5rem;">
         <div>Gross</div>
@@ -92,6 +179,7 @@
     if (token) apiClient.setToken(token);
 
     let bal = 0;
+    let payoutMethods = [];
     const num = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
     async function ensureAdmin() {
@@ -120,6 +208,8 @@
       const btn = document.getElementById('submit');
       const err = document.getElementById('err');
       err.textContent = '';
+      const payoutMethodId = document.getElementById('payoutMethodSelect').value;
+      if (!payoutMethodId) { btn.disabled = true; err.textContent = 'Please select a payout method.'; err.className='muted danger'; return; }
       if (!amount || amount <= 0) { btn.disabled = true; return; }
       if (amount > bal) { btn.disabled = true; err.textContent = 'Insufficient balance.'; err.className='muted danger'; return; }
       btn.disabled = false;
@@ -136,9 +226,15 @@
       const amount = inputValue ? parseInt(inputValue, 10) : 0;
       const err = document.getElementById('err');
       err.textContent = '';
+      const payoutMethodId = document.getElementById('payoutMethodSelect').value;
       
       if (!amount || amount < 1) {
         err.textContent = 'Please enter a valid amount (minimum 1 credit).';
+        err.className = 'muted danger';
+        return;
+      }
+      if (!payoutMethodId) {
+        err.textContent = 'Please select a payout method.';
         err.className = 'muted danger';
         return;
       }
@@ -150,7 +246,7 @@
       }
       
       try {
-        await apiClient.requestPayout(amount);
+        await apiClient.requestPayout(amount, payoutMethodId);
         document.getElementById('amount').value = '';
         document.getElementById('amount').classList.remove('valid-input', 'invalid-input');
         await loadBalance();
@@ -166,6 +262,7 @@
       const ok = await ensureAdmin();
       if (!ok) return;
       await loadBalance();
+      await loadPayoutMethods();
       updatePreview();
       
       const amountInput = document.getElementById('amount');
@@ -232,7 +329,99 @@
         amountInput.value = numbers;
         updatePreview();
       });
+
+      document.getElementById('togglePayoutMethodForm').addEventListener('click', () => {
+        const form = document.getElementById('payoutMethodForm');
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      });
+      document.getElementById('savePayoutMethodBtn').addEventListener('click', savePayoutMethod);
+      document.getElementById('payoutProvider').addEventListener('change', updatePayoutReferenceLabel);
+      document.getElementById('payoutMethodSelect').addEventListener('change', updatePreview);
+      updatePayoutReferenceLabel();
     });
+
+    function renderPayoutMethods() {
+      const select = document.getElementById('payoutMethodSelect');
+      select.innerHTML = '<option value="">Select a payout method</option>';
+      payoutMethods.forEach((method) => {
+        const label = method.details?.label || 'Payout method';
+        const last4 = method.details?.last4 ? `•••• ${method.details.last4}` : '';
+        const provider = method.provider ? method.provider.toUpperCase() : '';
+        const option = document.createElement('option');
+        option.value = method.id;
+        option.textContent = `${label} ${last4} ${provider}`.trim();
+        if (method.is_default) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
+    }
+
+    async function loadPayoutMethods() {
+      try {
+        payoutMethods = await apiClient.listPayoutMethods();
+        renderPayoutMethods();
+      } catch (e) {
+        console.error('Failed to load payout methods:', e);
+      }
+    }
+
+    function updatePayoutReferenceLabel() {
+      const provider = document.getElementById('payoutProvider').value;
+      const label = document.getElementById('payoutReferenceLabel');
+      const input = document.getElementById('payoutReference');
+      if (provider === 'paypal') {
+        label.textContent = 'PayPal email';
+        input.placeholder = 'you@example.com';
+      } else {
+        label.textContent = 'Account reference';
+        input.placeholder = 'Reference or account note';
+      }
+    }
+
+    async function savePayoutMethod() {
+      const err = document.getElementById('payoutMethodError');
+      err.textContent = '';
+      const provider = document.getElementById('payoutProvider').value;
+      const label = document.getElementById('payoutLabel').value.trim();
+      const last4 = document.getElementById('payoutLast4').value.trim();
+      const providerReference = document.getElementById('payoutReference').value.trim();
+      const isDefault = document.getElementById('payoutDefault').checked;
+
+      if (!label || !providerReference) {
+        err.textContent = 'Label and reference are required.';
+        err.className = 'muted danger';
+        return;
+      }
+      if (last4 && !/^[0-9]{4}$/.test(last4)) {
+        err.textContent = 'Last 4 must be exactly 4 digits.';
+        err.className = 'muted danger';
+        return;
+      }
+
+      const method = provider === 'paypal' ? 'paypal_email' : 'bank_transfer';
+      try {
+        await apiClient.createPayoutMethod({
+          provider,
+          method,
+          label,
+          last4: last4 || null,
+          provider_reference: providerReference,
+          is_default: isDefault,
+        });
+        document.getElementById('payoutLabel').value = '';
+        document.getElementById('payoutLast4').value = '';
+        document.getElementById('payoutReference').value = '';
+        document.getElementById('payoutDefault').checked = false;
+        document.getElementById('payoutMethodForm').style.display = 'none';
+        await loadPayoutMethods();
+        updatePreview();
+      } catch (e) {
+        console.error(e);
+        err.textContent = e?.message || 'Failed to save payout method.';
+        err.className = 'muted danger';
+      }
+    }
   </script>
 @endpush
 

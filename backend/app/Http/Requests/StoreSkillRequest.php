@@ -36,7 +36,7 @@ class StoreSkillRequest extends FormRequest
             ],
 
             'what_youll_learn' => [
-                'nullable',
+                'required',
                 'string',
             ],
 

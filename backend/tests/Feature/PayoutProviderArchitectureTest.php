@@ -27,7 +27,7 @@ class PayoutProviderArchitectureTest extends TestCase
             'user_id' => $user->id,
             'amount' => 10,
             'status' => 'pending',
-            'provider' => 'manual',
+            'provider' => 'paypal',
             'idempotency_key' => (string) Str::uuid(),
         ]);
         Transaction::create([

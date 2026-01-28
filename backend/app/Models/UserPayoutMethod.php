@@ -44,5 +44,15 @@ class UserPayoutMethod extends Model
     {
         $this->attributes['details_encrypted'] = Crypt::encryptString(json_encode($value));
     }
+
+    public function getSafeDetails(): array
+    {
+        $details = $this->details;
+        return [
+            'label' => $details['label'] ?? null,
+            'last4' => $details['last4'] ?? null,
+            'provider_reference' => $details['provider_reference'] ?? null,
+        ];
+    }
 }
 

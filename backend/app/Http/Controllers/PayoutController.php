@@ -3,15 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Payout;
-use App\Models\Transaction;
+use App\Models\UserPayoutMethod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 use Exception;
 use App\Jobs\ExecutePayoutJob;
 use App\Services\PayoutService;
-use Illuminate\Support\Str;
 
 class PayoutController extends Controller
 {
@@ -22,70 +19,23 @@ class PayoutController extends Controller
     {
         try {
             $request->validate([
-                'amount' => 'required|integer|min:10',
-                'provider' => 'nullable|string|in:manual,paypal',
+                'amount' => 'required|integer|min:1',
+                'payout_method_id' => 'required|integer',
             ]);
 
             $user = Auth::user();
+            $method = UserPayoutMethod::where('user_id', $user->id)
+                ->where('id', $request->input('payout_method_id'))
+                ->firstOrFail();
 
-            $gross = (int) $request->amount;
-            
-            // Check minimum amount
-            if ($gross < 10) {
-                return response()->json(['error' => 'Minimum cashout amount is 10 credits'], 400);
-            }
-            
-            $fee = $user->is_admin ? 0 : (int) floor($gross * 0.20);
-            $net = max(0, $gross - $fee);
-
-            if (($user->credits ?? 0) < $gross) {
-                return response()->json(['error' => 'Insufficient credits'], 400);
-            }
-            if ($net <= 0) {
-                return response()->json(['error' => 'Invalid payout amount after fee'], 400);
-            }
-
-            // Use database transaction to ensure atomicity
-            DB::beginTransaction();
-
-            try {
-                // Deduct credits immediately when payout is requested
-                $user->decrement('credits', $gross);
-
-                // Create payout request
-                $payout = Payout::create([
-                    'user_id' => $user->id,
-                    // amount is the NET amount sent to provider
-                    'amount' => $net,
-                    'gross_amount' => $gross,
-                    'fee_amount' => $fee,
-                    'net_amount' => $net,
-                    'status' => 'pending',
-                    'provider' => $request->input('provider', 'manual') ?: 'manual',
-                    'idempotency_key' => (string) Str::uuid(),
-                ]);
-
-                // Create transaction record (pending status) with fee captured
-                Transaction::create([
-                    'user_id' => $user->id,
-                    'type' => 'cashout',
-                    'amount' => $gross,
-                    'fee' => $fee,
-                    'status' => 'pending',
-                    'reference_id' => 'payout_' . $payout->id,
-                ]);
-
-                DB::commit();
+            /** @var PayoutService $payoutService */
+            $payoutService = app(PayoutService::class);
+            $payout = $payoutService->requestPayout($user, (int) $request->amount, $method);
 
             return response()->json([
                 'message' => 'Payout request submitted',
                 'payout' => $payout
             ], 201);
-
-        } catch (Exception $e) {
-                DB::rollBack();
-                throw $e;
-            }
 
         } catch (Exception $e) {
             return response()->json(['error' => 'Something went wrong: ' . $e->getMessage()], 500);
@@ -116,14 +66,11 @@ class PayoutController extends Controller
             $payout = $payout->fresh();
             
             // Only dispatch job for non-manual providers (PayPal, etc.)
-            // Manual payouts are already marked as paid in markApprovedAndDispatch
             if ($payout->provider !== 'manual') {
                 ExecutePayoutJob::dispatch($payout->id);
             }
 
-            $message = $payout->provider === 'manual' 
-                ? 'Payout approved and marked as paid' 
-                : 'Payout approved';
+            $message = 'Payout approved';
 
             return response()->json([
                 'message' => $message,
@@ -241,6 +188,8 @@ class PayoutController extends Controller
                     'net_amount' => $netAmount,
                     'status' => $payout->status,
                     'provider' => $payout->provider ?? 'manual',
+                    'method' => $payout->method,
+                    'method_details' => $payout->method_details ?? null,
                     'admin_note' => $payout->admin_note,
                     'created_at' => $payout->created_at ? $payout->created_at->toIso8601String() : null,
                     'updated_at' => $payout->updated_at ? $payout->updated_at->toIso8601String() : null,

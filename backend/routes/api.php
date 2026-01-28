@@ -10,6 +10,7 @@ use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\PayoutController;
+use App\Http\Controllers\PayoutMethodController;
 use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\DepositController;
 
@@ -123,14 +124,18 @@ Route::middleware('auth:sanctum')->group(function () {
     // User payout actions
     Route::post('/payouts', [PayoutController::class, 'requestPayout']);
     Route::get('/payouts', [PayoutController::class, 'getUserPayouts']);
+    Route::get('/payout-methods', [PayoutMethodController::class, 'index']);
+    Route::post('/payout-methods', [PayoutMethodController::class, 'store']);
+    Route::put('/payout-methods/{id}/default', [PayoutMethodController::class, 'setDefault']);
+    Route::delete('/payout-methods/{id}', [PayoutMethodController::class, 'destroy']);
 
     // Admin-only payout management
     Route::middleware('admin')->group(function () {
         Route::get('/payouts/all', [PayoutController::class, 'getAllPayouts']);
-    Route::post('/payouts/{id}/approve', [PayoutController::class, 'approvePayout']);
-    Route::post('/payouts/{id}/reject', [PayoutController::class, 'rejectPayout']);
-    Route::post('/payouts/{id}/paid', [PayoutController::class, 'markAsPaid']);
-});
+        Route::post('/payouts/{id}/approve', [PayoutController::class, 'approvePayout']);
+        Route::post('/payouts/{id}/reject', [PayoutController::class, 'rejectPayout']);
+        Route::post('/payouts/{id}/paid', [PayoutController::class, 'markAsPaid']);
+    });
 });
 
 // Messages - Conversation-based

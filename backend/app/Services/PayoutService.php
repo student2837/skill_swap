@@ -11,6 +11,7 @@ use App\Payments\Providers\ManualPayoutProvider;
 use App\Payments\Providers\PayPalPayoutProvider;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -45,17 +46,21 @@ class PayoutService
             return;
         }
 
-        $method = UserPayoutMethod::where('user_id', $payout->user_id)
-            ->where('provider', PayPalPayoutProvider::PROVIDER)
-            ->where('is_default', true)
-            ->first();
+        $methodQuery = UserPayoutMethod::where('user_id', $payout->user_id)
+            ->where('provider', PayPalPayoutProvider::PROVIDER);
+        if ($payout->payout_method_id) {
+            $methodQuery->where('id', $payout->payout_method_id);
+        } else {
+            $methodQuery->where('is_default', true);
+        }
+        $method = $methodQuery->first();
 
         if (!$method) {
             throw new RuntimeException('No default PayPal payout method configured for user');
         }
 
         $details = $method->details;
-        $receiver = $details['receiver'] ?? $details['email'] ?? null;
+        $receiver = $details['provider_reference'] ?? $details['receiver'] ?? $details['email'] ?? null;
         if (!is_string($receiver) || $receiver === '') {
             throw new RuntimeException('Invalid PayPal payout method details');
         }
@@ -63,6 +68,65 @@ class PayoutService
         $payout->method = $payout->method ?: ($method->method ?: 'paypal_email');
         $payout->method_details = ['receiver' => $receiver];
         $payout->save();
+    }
+
+    public function requestPayout(User $user, int $gross, UserPayoutMethod $method): Payout
+    {
+        $min = (int) config('payments.cashout_min', 10);
+        if ($gross < $min) {
+            throw new RuntimeException('Minimum cashout amount is ' . $min . ' credits');
+        }
+
+        $feeRate = $user->is_admin ? 0.0 : (float) config('payments.cashout_fee_rate', 0.20);
+        $fee = (int) floor($gross * $feeRate);
+        $net = max(0, $gross - $fee);
+        if ($net <= 0) {
+            throw new RuntimeException('Invalid payout amount after fee');
+        }
+
+        return DB::transaction(function () use ($user, $gross, $fee, $net, $method) {
+            $this->walletService->lockCredits($user->id, $gross);
+
+            $details = $method->getSafeDetails();
+            $methodDetails = [
+                'label' => $details['label'] ?? null,
+                'last4' => $details['last4'] ?? null,
+                'provider_reference' => $details['provider_reference'] ?? null,
+            ];
+
+            if ($method->provider === PayPalPayoutProvider::PROVIDER && $details['provider_reference'] ?? null) {
+                $methodDetails['receiver'] = $details['provider_reference'];
+            }
+
+            $payload = [
+                'user_id' => $user->id,
+                'amount' => $net,
+                'gross_amount' => $gross,
+                'fee_amount' => $fee,
+                'net_amount' => $net,
+                'status' => 'pending',
+                'provider' => $method->provider,
+                'method' => $method->method,
+                'method_details' => $methodDetails,
+                'idempotency_key' => (string) Str::uuid(),
+            ];
+            if (Schema::hasColumn('payouts', 'payout_method_id')) {
+                $payload['payout_method_id'] = $method->id;
+            }
+
+            $payout = Payout::create($payload);
+
+            Transaction::create([
+                'user_id' => $user->id,
+                'type' => 'cashout',
+                'amount' => $gross,
+                'fee' => $fee,
+                'status' => 'pending',
+                'reference_id' => 'payout_' . $payout->id,
+            ]);
+
+            return $payout;
+        });
     }
 
     public function markApprovedAndDispatch(Payout $payout, int $adminUserId): void
@@ -73,27 +137,32 @@ class PayoutService
             if ($locked->status !== 'pending') {
                 throw new RuntimeException('Invalid payout status for approval');
             }
-            
+            $gross = (int) ($locked->gross_amount ?? $locked->amount ?? 0);
+            if ($gross <= 0) {
+                throw new RuntimeException('Invalid payout amount');
+            }
+
             $locked->approved_at = Carbon::now();
+            if (Schema::hasColumn('payouts', 'approved_by')) {
+                $locked->approved_by = $adminUserId;
+            }
             if (empty($locked->idempotency_key)) {
                 $locked->idempotency_key = (string) Str::uuid();
             }
-            
-            // For manual payouts: approve and mark as paid in one step (admin handles payment outside system)
-            if ($locked->provider === ManualPayoutProvider::PROVIDER) {
-                $locked->status = 'paid';
-                $locked->processed_at = Carbon::now();
-                
-                // Update transaction status to completed
-                Transaction::where('reference_id', 'payout_' . $locked->id)
-                    ->where('type', 'cashout')
-                    ->where('status', 'pending')
-                    ->update(['status' => 'completed']);
-            } else {
-                // For automated providers (PayPal, etc.): just approve, job will handle processing
-                $locked->status = 'approved';
+
+            // Deduct locked credits atomically on approval (fallback to legacy debit if needed)
+            try {
+                $this->walletService->consumeLockedCredits($locked->user_id, $gross);
+            } catch (RuntimeException $e) {
+                if ($e->getMessage() === 'Locked credits insufficient') {
+                    $this->walletService->debitCredits($locked->user_id, $gross);
+                } else {
+                    throw $e;
+                }
             }
-            
+
+            // For automated providers (PayPal, etc.): just approve, job will handle processing
+            $locked->status = 'approved';
             $locked->save();
 
             // Credit platform fee to the approving admin (0% for admin cashouts)
@@ -131,9 +200,19 @@ class PayoutService
             $locked->processed_at = Carbon::now();
             $locked->save();
 
-            // Refund credits for rejected payouts (credits were deducted at request time)
+            // Unlock credits for rejected payouts (credits were locked at request time)
             $refund = (int) ($locked->gross_amount ?? $locked->amount);
-            $this->walletService->creditCredits($locked->user_id, $refund);
+            if ($refund > 0) {
+                try {
+                    $this->walletService->unlockCredits($locked->user_id, $refund);
+                } catch (RuntimeException $e) {
+                    if ($e->getMessage() === 'Locked credits insufficient') {
+                        $this->walletService->creditCredits($locked->user_id, $refund);
+                    } else {
+                        throw $e;
+                    }
+                }
+            }
 
             Transaction::where('reference_id', 'payout_' . $locked->id)
                 ->where('type', 'cashout')
@@ -174,9 +253,19 @@ class PayoutService
             $locked->failure_message = $message;
             $locked->save();
 
-            // Refund credits on failure (since credits were deducted at request time)
+            // Unlock credits on failure (credits were locked at request time)
             $refund = (int) ($locked->gross_amount ?? $locked->amount);
-            $this->walletService->creditCredits($locked->user_id, $refund);
+            if ($refund > 0) {
+                try {
+                    $this->walletService->unlockCredits($locked->user_id, $refund);
+                } catch (RuntimeException $e) {
+                    if ($e->getMessage() === 'Locked credits insufficient') {
+                        $this->walletService->creditCredits($locked->user_id, $refund);
+                    } else {
+                        throw $e;
+                    }
+                }
+            }
 
             Transaction::where('reference_id', 'payout_' . $locked->id)
                 ->where('type', 'cashout')
@@ -206,9 +295,9 @@ class PayoutService
                 throw new RuntimeException('Payout not approved');
             }
 
-            // Manual payouts should never reach here (they're marked as paid during approval)
+            // Manual payouts should not be executed by provider.
             if ($locked->provider === ManualPayoutProvider::PROVIDER) {
-                throw new RuntimeException('Manual payouts should be marked as paid during approval');
+                throw new RuntimeException('Manual payouts require admin completion');
             }
 
             if (empty($locked->idempotency_key)) {

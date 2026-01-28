@@ -57,7 +57,7 @@
             <tr>
               <th>ID</th>
               <th>User</th>
-              <th>Gross</th>
+              <th>Requested</th>
               <th>Fee</th>
               <th>Net</th>
               <th>Provider</th>
@@ -106,10 +106,10 @@
     }
 
     function computeFeeFallback(p) {
-      // UI display only: if backend provides fee/net, use them; otherwise show 0.
+      // UI display only: use requested gross if available, otherwise fallback.
       const fee = (p.fee ?? p.fee_amount);
       const net = (p.net ?? p.net_amount);
-      const gross = num(p.amount);
+      const gross = num(p.gross_amount ?? p.amount);
       const feeVal = fee !== undefined ? num(fee) : 0;
       const netVal = net !== undefined ? num(net) : (gross - feeVal);
       return { gross, feeVal, netVal };
@@ -132,10 +132,8 @@
       // Show action buttons based on status
       let actionsHtml = '';
       if (statusNorm === 'pending') {
-        // For manual payouts, button says "Approve & Pay" since it does both in one step
-        const approveLabel = provider === 'manual' ? 'Approve & Pay' : 'Approve';
         actionsHtml = `<div class="action-row">
-             <button class="btn-primary btn-xs" onclick="approve(${p.id})">${approveLabel}</button>
+             <button class="btn-danger btn-xs" onclick="approve(${p.id})">Approve</button>
              <button class="btn-danger btn-xs" onclick="rejectP(${p.id})">Reject</button>
            </div>`;
       } else if (statusNorm === 'processing' || statusNorm === 'approved') {
