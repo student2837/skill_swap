@@ -10,6 +10,8 @@ use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\PayoutController;
+use App\Http\Controllers\WebhookController;
+use App\Http\Controllers\DepositController;
 
 
 
@@ -25,6 +27,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/user/change-password', [UserController::class, 'changePassword']);
     Route::delete('/user/account', [UserController::class, 'deleteOwnAccount']);
 });
+
+// Webhooks (public)
+Route::post('/webhooks/paypal', [WebhookController::class, 'paypal']);
+Route::post('/webhooks/whish', [WebhookController::class, 'whish']);
 
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -48,6 +54,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Extra: teacher/student skill views
     Route::get('/user/teaching-skills', [UserController::class, 'getTeachingSkills']);
     Route::get('/user/learning-skills', [UserController::class, 'getLearningSkills']);
+});
+
+// Deposits (buy credits)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/deposits/whish/collect', [DepositController::class, 'createWhishCollect']);
+    Route::post('/deposits/paypal/order', [DepositController::class, 'createPayPalOrder']);
 });
 
 

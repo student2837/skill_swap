@@ -110,9 +110,9 @@
 
     function statusBadge(status) {
       const statusMap = {
-        'draft': '<span class="tag tag-yellow">Draft</span>',
+        'draft': '<span class="tag tag-red">Draft</span>',
         'active': '<span class="tag tag-green">Active</span>',
-        'paused': '<span class="tag tag-gray">Paused</span>',
+        'paused': '<span class="tag tag-red">Paused</span>',
         'pending': '<span class="tag tag-yellow">Pending</span>',
         'accepted': '<span class="tag tag-blue">Accepted</span>',
         'confirmed': '<span class="tag tag-blue">Confirmed</span>',

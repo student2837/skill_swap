@@ -94,12 +94,13 @@
       font-size: 0.875rem;
     }
     .btn-success {
-      background: rgba(34, 197, 94, 0.2);
-      color: #86efac;
-      border: 1px solid rgba(34, 197, 94, 0.3);
+      background: rgba(96, 165, 250, 0.15);
+      color: #ffffff;
+      border: 1px solid rgba(96, 165, 250, 0.4);
     }
     .btn-success:hover {
-      background: rgba(34, 197, 94, 0.3);
+      background: rgba(96, 165, 250, 0.25);
+      border-color: rgba(96, 165, 250, 0.6);
     }
     .btn-danger {
       background: rgba(239, 68, 68, 0.2);
@@ -110,12 +111,13 @@
       background: rgba(239, 68, 68, 0.3);
     }
     .btn-warning {
-      background: rgba(251, 191, 36, 0.2);
-      color: #fde047;
-      border: 1px solid rgba(251, 191, 36, 0.3);
+      background: rgba(96, 165, 250, 0.15);
+      color: #ffffff;
+      border: 1px solid rgba(96, 165, 250, 0.4);
     }
     .btn-warning:hover {
-      background: rgba(251, 191, 36, 0.3);
+      background: rgba(96, 165, 250, 0.25);
+      border-color: rgba(96, 165, 250, 0.6);
     }
     .form-inline {
       display: flex;
@@ -149,6 +151,28 @@
                   0 0 40px rgba(239, 68, 68, 0.4),
                   0 0 60px rgba(239, 68, 68, 0.2);
       transform: translateY(-1px);
+    }
+    
+    /* Force blue color for transaction type and status badges */
+    .request-table .tag,
+    .request-table td .tag,
+    .request-table td:nth-child(3) .tag,
+    .request-table td:nth-child(5) .tag,
+    table .tag,
+    td .tag {
+      background: rgba(15, 23, 42, 0.85) !important;
+      border: 1px solid rgba(96, 165, 250, 0.6) !important;
+      color: #60a5fa !important;
+    }
+    
+    .request-table .tag-green,
+    .request-table td .tag-green,
+    .request-table td:nth-child(5) .tag-green,
+    table .tag-green,
+    td .tag-green {
+      background: rgba(15, 23, 42, 0.85) !important;
+      border: 1px solid rgba(96, 165, 250, 0.6) !important;
+      color: #60a5fa !important;
     }
   </style>
 @endpush
@@ -481,7 +505,7 @@
       }
     }
 
-    async function image.pngmake loadCategories() {
+    async function loadCategories() {
       try {
         const categories = await apiClient.listCategories();
         const container = document.getElementById('categoriesList');
@@ -519,9 +543,11 @@
       const statusMap = {
         'pending': '<span class="tag tag-yellow">Pending</span>',
         'approved': '<span class="tag tag-blue">Approved</span>',
+        'processing': '<span class="tag tag-blue">In Progress</span>',
         'rejected': '<span class="tag tag-red">Rejected</span>',
         'paid': '<span class="tag tag-green">Paid</span>',
         'completed': '<span class="tag tag-green">Completed</span>',
+        'failed': '<span class="tag tag-red">Failed</span>',
       };
       return statusMap[status?.toLowerCase()] || `<span class="tag">${status || 'Unknown'}</span>`;
     }

@@ -35,4 +35,31 @@ return [
         ],
     ],
 
+    /*
+     |--------------------------------------------------------------------------
+     | Payments
+     |--------------------------------------------------------------------------
+     */
+    'paypal' => [
+        'base_url' => env('PAYPAL_BASE_URL', 'https://api-m.sandbox.paypal.com'),
+        'client_id' => env('PAYPAL_CLIENT_ID'),
+        'secret' => env('PAYPAL_SECRET'),
+        'webhook_id' => env('PAYPAL_WEBHOOK_ID'),
+        'currency' => env('PAYPAL_CURRENCY', 'USD'),
+        'timeout' => env('PAYPAL_TIMEOUT', 20),
+        'payout_email_subject' => env('PAYPAL_PAYOUT_EMAIL_SUBJECT', 'You have a payout'),
+        'payout_note' => env('PAYPAL_PAYOUT_NOTE', 'SkillSwap cashout'),
+        'checkout_return_url' => env('PAYPAL_CHECKOUT_RETURN_URL'),
+        'checkout_cancel_url' => env('PAYPAL_CHECKOUT_CANCEL_URL'),
+    ],
+
+    'whish' => [
+        'collect_base_url' => env('WHISH_COLLECT_BASE_URL', 'https://example-whish.test'),
+        'merchant_id' => env('WHISH_MERCHANT_ID'),
+        'secret' => env('WHISH_SECRET'),
+        'currency' => env('WHISH_CURRENCY', 'USD'),
+        'webhook_url' => env('WHISH_WEBHOOK_URL'),
+        'return_url' => env('WHISH_RETURN_URL'),
+    ],
+
 ];

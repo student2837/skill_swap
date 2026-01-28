@@ -15,23 +15,33 @@ use App\Models\SkillRequest;
 class UserController extends Controller
 {
     public function register(Request $request){
+        try {
+            $request->validate([
+                'name'=>'required|string|max:50',
+                'email'=>'required|email|unique:users,email',
+                'password'=>'required|min:8',
+            ]);
 
-        $request->validate([
-            'name'=>'required|string|max:50',
-            'email'=>'required|email|unique:users,email',
-            'password'=>'required|min:8',
-        ]);
+            $user=User::create([
+                'name'=>$request->name,
+                'email'=>$request->email,
+                'password'=>Hash::make($request->password),
+            ]);
 
-        $user=User::create([
-            'name'=>$request->name,
-            'email'=>$request->email,
-            'password'=>Hash::make($request->password),
-        ]);
-
-        return response()->json([
-            'message'=>'User registered successfully',
-            'user'=>$user,
-        ],201);
+            return response()->json([
+                'message'=>'User registered successfully',
+                'user'=>$user,
+            ],201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Handle validation errors, especially duplicate email
+            if ($e->errors() && isset($e->errors()['email'])) {
+                return response()->json([
+                    'error' => 'This email is already registered. Please use a different email or log in.',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        }
     }
 
     public function login(Request $request){
@@ -74,7 +84,15 @@ class UserController extends Controller
     public function updateProfile(Request $request)
     {
         $user = $request->user();
-        $user->update($request->only(['name', 'bio', 'profile_pic']));
+        
+        $request->validate([
+            'name' => 'sometimes|string|max:50',
+            'email' => 'sometimes|email|unique:users,email,' . $user->id,
+            'bio' => 'sometimes|nullable|string',
+            'profile_pic' => 'sometimes|nullable|string',
+        ]);
+        
+        $user->update($request->only(['name', 'email', 'bio', 'profile_pic']));
         return response()->json($user);
     }
 

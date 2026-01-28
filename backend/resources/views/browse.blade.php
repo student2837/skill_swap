@@ -356,7 +356,16 @@
           categorySelect.appendChild(opt);
         }
 
-        categories.forEach(cat => {
+        // Sort categories: alphabetically first, then "other" should always be last
+        const sortedCategories = [...categories].sort((a, b) => {
+          const aName = (a.name || '').toLowerCase();
+          const bName = (b.name || '').toLowerCase();
+          if (aName === 'other') return 1;
+          if (bName === 'other') return -1;
+          return aName.localeCompare(bName); // Alphabetical order for others
+        });
+        
+        sortedCategories.forEach(cat => {
           if (!cat || cat.id == null) return;
           const opt = document.createElement('option');
           opt.value = String(cat.id);

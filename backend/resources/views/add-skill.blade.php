@@ -44,19 +44,13 @@
         <label>
           <span>Category</span>
           <select id="skillCategory" required>
-            <option value="">Loading categories...</option>
+            <option value="">Select a category</option>
           </select>
         </label>
 
-        <label style="position: relative;">
+        <label>
           <span>Course price (credits)</span>
-          <div style="position: relative;">
-            <input type="number" id="skillPrice" min="1" step="1" required />
-            <div class="number-spinner">
-              <button type="button" class="number-spinner-btn up" onclick="incrementPrice()">▲</button>
-              <button type="button" class="number-spinner-btn down" onclick="decrementPrice()">▼</button>
-            </div>
-          </div>
+          <input type="number" id="skillPrice" min="1" step="1" required />
         </label>
 
         <label>
@@ -75,7 +69,7 @@
         </label>
 
         <label class="form-label">
-          <span>What you'll learn</span>
+          What you'll learn
           <textarea
             id="skillLearn"
             rows="4"
@@ -120,51 +114,35 @@
       apiClient.setToken(token);
     }
 
-    // Load categories dynamically
-    async function loadCategoriesForDropdown() {
+    const categorySelect = document.getElementById("skillCategory");
+
+    const renderCategories = (categories) => {
+      categorySelect.innerHTML = '<option value="">Select a category</option>';
+      categories.forEach((category) => {
+        const option = document.createElement("option");
+        option.value = category.id;
+        option.textContent = category.name;
+        categorySelect.appendChild(option);
+      });
+    };
+
+    const loadCategories = async () => {
       try {
         const categories = await apiClient.listCategories();
-        const selectElement = document.getElementById('skillCategory');
-        
-        if (categories.length === 0) {
-          selectElement.innerHTML = '<option value="">No categories available</option>';
-          return;
-        }
-        
-        selectElement.innerHTML = '<option value="">Select a category</option>' +
-          categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
+        renderCategories(categories);
       } catch (err) {
-        console.error("Error loading categories for dropdown:", err);
-        const selectElement = document.getElementById('skillCategory');
-        selectElement.innerHTML = '<option value="">Error loading categories</option>';
-        alert("Failed to load categories. Please refresh the page.");
+        console.error("Failed to load categories:", err);
+        alert("Unable to load categories. Please refresh and try again.");
       }
-    }
+    };
 
-    // Load categories when page loads
-    loadCategoriesForDropdown();
-
-    // Number spinner functions
-    function incrementPrice() {
-      const priceInput = document.getElementById('skillPrice');
-      const currentValue = parseInt(priceInput.value) || 0;
-      priceInput.value = currentValue + 1;
-      priceInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
-    function decrementPrice() {
-      const priceInput = document.getElementById('skillPrice');
-      const currentValue = parseInt(priceInput.value) || 1;
-      if (currentValue > 1) {
-        priceInput.value = currentValue - 1;
-        priceInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    }
+    loadCategories();
 
     // Handle button click
     document.getElementById("saveSkillBtn").addEventListener("click", async () => {
       const title = document.getElementById("skillTitle").value.trim();
-      const categoryId = parseInt(document.getElementById("skillCategory").value);
+      const categoryValue = document.getElementById("skillCategory").value;
+      const categoryId = categoryValue ? Number(categoryValue) : null;
       const price = parseInt(document.getElementById("skillPrice").value);
       const shortDesc = document.getElementById("skillShortDesc").value.trim();
       const description = document.getElementById("skillDescription").value.trim();
@@ -199,7 +177,7 @@
       }
 
       // Validation: category is required
-      if (!categoryId || isNaN(categoryId)) {
+      if (!categoryId || Number.isNaN(categoryId)) {
         alert("Please select a category");
         return;
       }

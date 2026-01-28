@@ -65,10 +65,18 @@ class CategoryController extends Controller
     {
         try {
             $categories = Category::all();
+            
+            // Sort categories: alphabetically first, then "other" (case-insensitive) should always be last
+            $sortedCategories = $categories->sortBy(function($category) {
+                $name = strtolower($category->name);
+                // If it's "other", return a high value to push it to the end
+                // Otherwise, return the lowercase name for alphabetical sorting
+                return $name === 'other' ? 'zzzzz_other' : $name;
+            })->values();
 
             return response()->json([
                 'message' => 'Categories retrieved successfully',
-                'categories' => $categories
+                'categories' => $sortedCategories
             ], 200);
 
         } catch (Exception $e) {

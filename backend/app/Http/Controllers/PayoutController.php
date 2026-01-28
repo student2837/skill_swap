@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Exception;
+use App\Jobs\ExecutePayoutJob;
+use App\Services\PayoutService;
+use Illuminate\Support\Str;
 
 class PayoutController extends Controller
 {
@@ -19,13 +22,27 @@ class PayoutController extends Controller
     {
         try {
             $request->validate([
-                'amount' => 'required|integer|min:1'
+                'amount' => 'required|integer|min:10',
+                'provider' => 'nullable|string|in:manual,paypal',
             ]);
 
             $user = Auth::user();
 
-            if ($user->credits < $request->amount) {
+            $gross = (int) $request->amount;
+            
+            // Check minimum amount
+            if ($gross < 10) {
+                return response()->json(['error' => 'Minimum cashout amount is 10 credits'], 400);
+            }
+            
+            $fee = $user->is_admin ? 0 : (int) floor($gross * 0.20);
+            $net = max(0, $gross - $fee);
+
+            if (($user->credits ?? 0) < $gross) {
                 return response()->json(['error' => 'Insufficient credits'], 400);
+            }
+            if ($net <= 0) {
+                return response()->json(['error' => 'Invalid payout amount after fee'], 400);
             }
 
             // Use database transaction to ensure atomicity
@@ -33,33 +50,30 @@ class PayoutController extends Controller
 
             try {
                 // Deduct credits immediately when payout is requested
-                $user->decrement('credits', $request->amount);
+                $user->decrement('credits', $gross);
 
-                // Create transaction record (pending status)
+                // Create payout request
+                $payout = Payout::create([
+                    'user_id' => $user->id,
+                    // amount is the NET amount sent to provider
+                    'amount' => $net,
+                    'gross_amount' => $gross,
+                    'fee_amount' => $fee,
+                    'net_amount' => $net,
+                    'status' => 'pending',
+                    'provider' => $request->input('provider', 'manual') ?: 'manual',
+                    'idempotency_key' => (string) Str::uuid(),
+                ]);
+
+                // Create transaction record (pending status) with fee captured
                 Transaction::create([
                     'user_id' => $user->id,
                     'type' => 'cashout',
-                    'amount' => $request->amount,
-                    'fee' => 0,
+                    'amount' => $gross,
+                    'fee' => $fee,
                     'status' => 'pending',
-                    'reference_id' => null // Will be set when payout is created
+                    'reference_id' => 'payout_' . $payout->id,
                 ]);
-
-                // Create payout request
-            $payout = Payout::create([
-                'user_id' => $user->id,
-                'amount' => $request->amount,
-                'status' => 'pending'
-            ]);
-
-                // Update transaction with payout reference
-                Transaction::where('user_id', $user->id)
-                    ->where('type', 'cashout')
-                    ->where('status', 'pending')
-                    ->whereNull('reference_id')
-                    ->latest()
-                    ->first()
-                    ->update(['reference_id' => 'payout_' . $payout->id]);
 
                 DB::commit();
 
@@ -95,13 +109,24 @@ class PayoutController extends Controller
                 return response()->json(['error' => 'Invalid payout status'], 400);
             }
 
-            $payout->update([
-                'status' => 'approved',
-                'processed_at' => Carbon::now()
-            ]);
+            /** @var PayoutService $payoutService */
+            $payoutService = app(PayoutService::class);
+            $payoutService->markApprovedAndDispatch($payout, (int) Auth::id());
+
+            $payout = $payout->fresh();
+            
+            // Only dispatch job for non-manual providers (PayPal, etc.)
+            // Manual payouts are already marked as paid in markApprovedAndDispatch
+            if ($payout->provider !== 'manual') {
+                ExecutePayoutJob::dispatch($payout->id);
+            }
+
+            $message = $payout->provider === 'manual' 
+                ? 'Payout approved and marked as paid' 
+                : 'Payout approved';
 
             return response()->json([
-                'message' => 'Payout approved',
+                'message' => $message,
                 'payout' => $payout
             ], 200);
 
@@ -127,15 +152,13 @@ class PayoutController extends Controller
 
             $payout = Payout::findOrFail($id);
 
-            $payout->update([
-                'status' => 'rejected',
-                'admin_note' => $request->admin_note,
-                'processed_at' => Carbon::now()
-            ]);
+            /** @var PayoutService $payoutService */
+            $payoutService = app(PayoutService::class);
+            $payoutService->markRejected($payout, $request->admin_note);
 
             return response()->json([
                 'message' => 'Payout rejected',
-                'payout' => $payout
+                'payout' => $payout->fresh()
             ], 200);
 
         } catch (Exception $e) {
@@ -156,23 +179,17 @@ class PayoutController extends Controller
 
             $payout = Payout::findOrFail($id);
 
-            if ($payout->status !== 'approved') {
-                return response()->json(['error' => 'Payout must be approved first'], 400);
+            if (!in_array($payout->status, ['approved', 'processing'], true)) {
+                return response()->json(['error' => 'Payout must be approved/processing first'], 400);
             }
 
-            // Update transaction status from pending to completed
-            Transaction::where('reference_id', 'payout_' . $payout->id)
-                ->where('status', 'pending')
-                ->update(['status' => 'completed']);
-
-            $payout->update([
-                'status' => 'paid',
-                'processed_at' => Carbon::now()
-            ]);
+            /** @var PayoutService $payoutService */
+            $payoutService = app(PayoutService::class);
+            $payoutService->markPaid($payout);
 
             return response()->json([
                 'message' => 'Payout completed',
-                'payout' => $payout
+                'payout' => $payout->fresh()
             ], 200);
 
         } catch (Exception $e) {
@@ -188,12 +205,55 @@ class PayoutController extends Controller
         try {
             $payouts = Auth::user()->payouts()->latest()->get();
 
+            // Format payouts to ensure proper serialization
+            $formattedPayouts = $payouts->map(function ($payout) {
+                // Handle old payouts that might not have fee fields populated
+                // If gross_amount is null, assume amount is the net amount and calculate backwards
+                $grossAmount = $payout->gross_amount;
+                $feeAmount = $payout->fee_amount ?? 0;
+                $netAmount = $payout->net_amount ?? $payout->amount;
+                
+                // If gross_amount is missing, calculate it from net amount (assuming 20% fee)
+                // This handles old payouts created before fee fields were added
+                if ($grossAmount === null || $grossAmount === 0) {
+                    // If we have net_amount or amount, calculate gross backwards
+                    // net = gross * 0.8, so gross = net / 0.8
+                    if ($netAmount > 0) {
+                        $grossAmount = (int) ceil($netAmount / 0.8);
+                        $feeAmount = $grossAmount - $netAmount;
+                    } else {
+                        // Fallback: use amount as gross if we can't calculate
+                        $grossAmount = $payout->amount;
+                        $feeAmount = 0;
+                    }
+                }
+                
+                // Ensure net_amount is set correctly
+                if ($payout->net_amount === null) {
+                    $netAmount = $grossAmount - $feeAmount;
+                }
+                
+                return [
+                    'id' => $payout->id,
+                    'amount' => $payout->amount,
+                    'gross_amount' => $grossAmount,
+                    'fee_amount' => $feeAmount,
+                    'net_amount' => $netAmount,
+                    'status' => $payout->status,
+                    'provider' => $payout->provider ?? 'manual',
+                    'admin_note' => $payout->admin_note,
+                    'created_at' => $payout->created_at ? $payout->created_at->toIso8601String() : null,
+                    'updated_at' => $payout->updated_at ? $payout->updated_at->toIso8601String() : null,
+                    'processed_at' => $payout->processed_at ? $payout->processed_at->toIso8601String() : null,
+                ];
+            });
+
             return response()->json([
-                'payouts' => $payouts
+                'payouts' => $formattedPayouts
             ], 200);
 
         } catch (Exception $e) {
-            return response()->json(['error' => 'Something went wrong'], 500);
+            return response()->json(['error' => 'Something went wrong: ' . $e->getMessage()], 500);
         }
     }
 

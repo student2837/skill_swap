@@ -58,6 +58,23 @@ Route::get('/credits', function () {
     return view('credits');
 })->name('credits');
 
+Route::get('/credits/status', function () {
+    return view('credits-status');
+})->name('credits.status');
+
+// Wallet / Cashout / Transactions
+Route::get('/wallet', function () {
+    return view('wallet');
+})->name('wallet');
+
+Route::get('/cashout', function () {
+    return view('cashout');
+})->name('cashout');
+
+Route::get('/transactions', function () {
+    return view('transactions');
+})->name('transactions');
+
 Route::get('/profile', function () {
     return view('profile');
 })->name('profile');
@@ -78,3 +95,19 @@ Route::get('/request-session', function () {
 Route::get('/admin/dashboard', function () {
     return view('admin-dashboard');
 })->name('admin.dashboard');
+
+Route::get('/admin/wallet', function () {
+    return view('admin-wallet');
+})->name('admin.wallet');
+
+Route::get('/admin/payouts', function () {
+    return view('admin-payouts');
+})->name('admin.payouts');
+
+Route::get('/admin/payouts/{id}', function ($id) {
+    return view('admin-payout-details', ['id' => $id]);
+})->name('admin.payouts.show');
+
+Route::get('/admin/cashout', function () {
+    return view('admin-cashout');
+})->name('admin.cashout');

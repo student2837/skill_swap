@@ -78,15 +78,47 @@
       <h2>Credits & Transactions</h2>
 
       <div class="topbar-actions">
-        <button class="btn-primary" onclick="handleBuyCredits()">
-          Buy credits
-        </button>
-
-        <button class="btn-secondary" onclick="handleRequestCashout()">
-          Request cashout
-        </button>
+        <a class="btn-primary" href="#buyCredits">Buy credits</a>
+        <a class="btn-secondary" href="{{ route('cashout') }}">Request cashout</a>
       </div>
     </header>
+
+    <!-- Buy credits (REAL payment flow: Whish Collect) -->
+    <section id="buyCredits" class="dash-card glass" style="margin-bottom: 1.15rem;">
+      <div class="dash-card-header">
+        <h3>Buy Credits</h3>
+        <p class="muted">
+          <strong>1 credit = 1 USD</strong> • Credits are added <strong>after successful payment confirmation</strong>.
+        </p>
+      </div>
+
+      <div class="muted" style="margin-bottom: 0.6rem;">Select a package:</div>
+      <div id="packageGrid" class="stats-grid" style="margin-top: 0;"></div>
+
+      <div style="margin-top: 1rem;">
+        <div class="muted" style="margin-bottom: 0.5rem;">Payment method:</div>
+        <label style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem;">
+          <input type="radio" name="payMethod" value="whish" checked />
+          <span>Credit / Debit Card (Whish)</span>
+        </label>
+        <label style="display:flex; gap:0.5rem; align-items:center;">
+          <input type="radio" name="payMethod" value="paypal" />
+          <span>PayPal</span>
+        </label>
+
+        <button
+          class="btn-primary"
+          id="payBtn"
+          type="button"
+          onclick="startWhishCollect()"
+          disabled
+          style="display:inline-flex; margin: 0.85rem 0 0 0; cursor: pointer;"
+        >
+          Continue to payment
+        </button>
+      </div>
+      <p class="muted" id="buyErr" style="margin-top: 0.75rem;"></p>
+    </section>
 
     <!-- Stats -->
     <section class="stats-grid">
@@ -221,7 +253,9 @@
       if (transaction.type === 'skill_payment' || transaction.type === 'skill_earning') {
         return 'Session completed'; // Could be enhanced to show skill name from reference_id
       } else if (transaction.type === 'credit_purchase') {
-        return 'Card payment';
+        const ref = transaction.reference_id || '';
+        if (typeof ref === 'string' && ref.startsWith('whish_collect_')) return 'Whish (Card)';
+        return 'Deposit';
       } else if (transaction.type === 'cashout') {
         return 'Transfer to bank';
       }
@@ -332,54 +366,149 @@
       }
     }
 
-    async function handleBuyCredits() {
-      const amount = prompt("Enter the number of credits you want to buy:");
-      if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
-        alert("Please enter a valid amount");
+    // ---- REAL buy credits flow (Whish Collect) ----
+    const CREDIT_PACKAGES = @json(config('credit_packages.packages'));
+    let selectedPackageKey = null;
+
+    function renderPackages() {
+      const grid = document.getElementById('packageGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      const entries = Object.entries(CREDIT_PACKAGES || {});
+      if (!entries.length) {
+        grid.innerHTML = "<p class='muted'>No packages configured.</p>";
         return;
       }
 
-      try {
-        // Create a credit purchase transaction
-        await apiClient.createTransaction({
-          type: 'credit_purchase',
-          amount: parseInt(amount)
-        });
+      entries.forEach(([key, pkg]) => {
+        const usd = pkg?.usd ?? '—';
+        const credits = pkg?.credits ?? '—';
+        const card = document.createElement('div');
+        card.className = 'stat-card glass';
+        card.style.cursor = 'pointer';
+        card.onclick = () => selectPackage(key);
+        card.innerHTML = `
+          <h3>$${usd}</h3>
+          <p class="stat-value">${credits}</p>
+          <p class="stat-label">credits</p>
+        `;
+        card.dataset.key = key;
+        grid.appendChild(card);
+      });
+    }
 
-        // Update user's credits (this would normally be done by backend)
-        // For now, we'll reload the data
-        alert("Credits purchased successfully!");
-        loadCreditsData();
+    function selectPackage(key) {
+      selectedPackageKey = key;
+      document.querySelectorAll('#packageGrid .stat-card').forEach(el => {
+        el.style.outline = el.dataset.key === key ? '2px solid rgba(34, 211, 238, 0.75)' : 'none';
+      });
+      document.getElementById('payBtn').disabled = false;
+      document.getElementById('buyErr').textContent = '';
+    }
+
+    function startWhishCollect() {
+      // Inform user that payment will be available soon
+      alert("Payment processing will be available soon. Thank you for your patience!");
+      return;
+    }
+    
+    async function startWhishCollectOld() {
+      const err = document.getElementById('buyErr');
+      err.textContent = '';
+
+      if (!selectedPackageKey) {
+        err.textContent = 'Please select a package.';
+        return;
+      }
+
+      const method = document.querySelector('input[name=\"payMethod\"]:checked')?.value;
+      const payBtn = document.getElementById('payBtn');
+      
+      try {
+        if (method === 'paypal') {
+          const res = await apiClient.post('/deposits/paypal/order', { package: selectedPackageKey });
+          if (!res?.approval_url) throw new Error('No approval_url returned from backend');
+          if (res.reference) localStorage.setItem('last_paypal_reference', res.reference);
+          // Open PayPal in new window
+          const paypalWindow = window.open(res.approval_url, 'paypal_payment', 'width=800,height=600,scrollbars=yes,resizable=yes');
+          if (paypalWindow) {
+            payBtn.disabled = true;
+            payBtn.textContent = 'Processing...';
+            // Monitor the window to re-enable button when closed
+            const checkClosed = setInterval(() => {
+              if (paypalWindow.closed) {
+                clearInterval(checkClosed);
+                payBtn.disabled = false;
+                payBtn.textContent = 'Continue to payment';
+                // Refresh credits after payment window closes
+                setTimeout(() => loadCreditsData(), 1000);
+              }
+            }, 500);
+          } else {
+            // If popup blocked, fallback to redirect
+            window.location.href = res.approval_url;
+          }
+          return;
+        }
+
+        // default: Whish collect - open in new window instead of redirecting
+        const res = await apiClient.post('/deposits/whish/collect', { package: selectedPackageKey });
+        if (!res?.collect_url) throw new Error('No collect_url returned from backend');
+        if (res.reference) localStorage.setItem('last_whish_reference', res.reference);
         
-        // Notify dashboard to refresh credits
-        localStorage.setItem('creditsUpdated', Date.now().toString());
-        setTimeout(() => localStorage.removeItem('creditsUpdated'), 100);
-      } catch (err) {
-        alert("Failed to purchase credits: " + (err.message || "Unknown error"));
+        // Open Whish payment in a new window/tab instead of redirecting
+        const whishWindow = window.open(res.collect_url, 'whish_payment', 'width=800,height=600,scrollbars=yes,resizable=yes');
+        
+        if (whishWindow) {
+          // Disable button and show processing state
+          payBtn.disabled = true;
+          const originalText = payBtn.textContent;
+          payBtn.textContent = 'Payment window opened...';
+          
+          // Show success message
+          err.textContent = 'Payment window opened in a new tab. Complete your payment there. This page will refresh automatically when you close the payment window.';
+          err.style.color = 'rgba(34, 197, 94, 0.9)';
+          
+          // Monitor the payment window to detect when it closes
+          const checkClosed = setInterval(() => {
+            if (whishWindow.closed) {
+              clearInterval(checkClosed);
+              // Re-enable button
+              payBtn.disabled = false;
+              payBtn.textContent = originalText;
+              // Refresh credits data after payment window closes
+              setTimeout(() => {
+                loadCreditsData().then(() => {
+                  err.textContent = 'Payment window closed. Credits will be added automatically once payment is confirmed.';
+                  err.style.color = 'rgba(34, 197, 94, 0.9)';
+                  setTimeout(() => {
+                    err.textContent = '';
+                  }, 8000);
+                });
+              }, 1000);
+            }
+          }, 500);
+        } else {
+          // If popup was blocked, show error message
+          err.textContent = 'Popup blocked. Please allow popups for this site and try again.';
+          err.style.color = 'rgba(239, 68, 68, 0.9)';
+          // Fallback: try to open in new tab after a delay
+          setTimeout(() => {
+            const fallbackWindow = window.open(res.collect_url, '_blank');
+            if (fallbackWindow) {
+              err.textContent = 'Payment opened in a new tab. Complete your payment there.';
+              err.style.color = 'rgba(34, 197, 94, 0.9)';
+            }
+          }, 1000);
+        }
+      } catch (e) {
+        console.error(e);
+        err.textContent = e?.message || 'Failed to start payment';
+        err.style.color = 'rgba(239, 68, 68, 0.9)';
+        payBtn.disabled = false;
+        payBtn.textContent = 'Continue to payment';
       }
-    }
-
-    async function handleRequestCashout() {
-      const amount = prompt("Enter the number of credits you want to cash out:");
-      if (!amount || isNaN(amount) || parseInt(amount) <= 0) {
-        alert("Please enter a valid amount");
-        return;
-      }
-
-      try {
-        await apiClient.requestPayout(parseInt(amount));
-        alert("Cashout request submitted successfully!");
-        loadCreditsData();
-      } catch (err) {
-        alert("Failed to request cashout: " + (err.message || "Unknown error"));
-      }
-    }
-
-    // Check if createTransaction method exists in api-client
-    if (!apiClient.createTransaction) {
-      apiClient.createTransaction = async function(transactionData) {
-        return await this.post('/transactions', transactionData);
-      };
     }
 
     // Check URL parameters for buy action
@@ -402,19 +531,13 @@
     });
 
     loadCreditsData().then(() => {
-      // If buy parameter is present, open the buy credits dialog
+      renderPackages();
+      // If buy parameter is present, scroll to the Buy Credits section (no fake top-up).
       if (shouldBuy === 'true') {
-        // Show a message if amount is provided, then prompt for user input
-        setTimeout(() => {
-          if (amountParam && !isNaN(amountParam) && parseInt(amountParam) > 0) {
-            // Show info about how much they need, but let them choose the amount
-            const needed = parseInt(amountParam);
-            alert(`You need ${needed} credits to book the session.\n\nPlease enter the amount of credits you want to buy.`);
-          }
-          // Always prompt the user to enter the amount they want
-          handleBuyCredits();
-        }, 500);
+        setTimeout(() => document.getElementById('buyCredits')?.scrollIntoView({ behavior: 'smooth' }), 300);
       }
     });
+
+    // (no extra method UX needed)
   </script>
 @endpush

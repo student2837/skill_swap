@@ -12,7 +12,10 @@
     <a href="{{ route('messages') }}" class="nav-item {{ request()->routeIs('messages') ? 'active' : '' }}">💬 Messages</a>
     <a href="{{ route('favorites') }}" class="nav-item {{ request()->routeIs('favorites') ? 'active' : '' }}">❤️ Favorites</a>
     <a href="{{ route('review') }}" class="nav-item {{ request()->routeIs('review') ? 'active' : '' }}">⭐ Reviews</a>
+    <a href="{{ route('wallet') }}" class="nav-item {{ request()->routeIs('wallet') ? 'active' : '' }}">💼 Wallet</a>
+    <a href="{{ route('transactions') }}" class="nav-item {{ request()->routeIs('transactions') ? 'active' : '' }}">🧾 Transactions</a>
     <a href="{{ route('credits') }}" class="nav-item {{ request()->routeIs('credits') ? 'active' : '' }}">💳 Credits</a>
+    <a href="{{ route('cashout') }}" class="nav-item {{ request()->routeIs('cashout') ? 'active' : '' }}">💸 Cashout</a>
     <a href="{{ route('profile') }}" class="nav-item {{ request()->routeIs('profile') ? 'active' : '' }}">👤 Profile</a>
   </nav>
 

@@ -107,7 +107,14 @@
           alert("Registration successful! Please log in.");
           window.location.href = "{{ route('login') }}";
         } catch (err) {
-          alert(err.message || "Registration failed");
+          // Handle duplicate email error specifically
+          if (err.status === 422 && err.data?.errors?.email) {
+            alert("This email is already registered. Please use a different email or log in.");
+          } else if (err.message) {
+            alert(err.message);
+          } else {
+            alert("Registration failed. Please try again.");
+          }
         }
       });
     });

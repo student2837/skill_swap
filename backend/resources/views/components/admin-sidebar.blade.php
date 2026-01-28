@@ -6,6 +6,9 @@
 
   <nav class="sidebar-nav">
     <a href="{{ route('admin.dashboard') }}" class="nav-item {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">⚙️ Admin Panel</a>
+    <a href="{{ route('admin.wallet') }}" class="nav-item {{ request()->routeIs('admin.wallet') ? 'active' : '' }}">🏦 Platform Wallet</a>
+    <a href="{{ route('admin.payouts') }}" class="nav-item {{ request()->routeIs('admin.payouts') || request()->routeIs('admin.payouts.show') ? 'active' : '' }}">💸 Payouts</a>
+    <a href="{{ route('admin.cashout') }}" class="nav-item {{ request()->routeIs('admin.cashout') ? 'active' : '' }}">💳 Admin Cashout</a>
     <a href="{{ route('browse') }}" class="nav-item {{ request()->routeIs('browse') ? 'active' : '' }}">🔍 Browse Skills</a>
     <a href="{{ route('messages') }}" class="nav-item {{ request()->routeIs('messages') ? 'active' : '' }}">💬 Messages</a>
     <a href="{{ route('profile') }}" class="nav-item {{ request()->routeIs('profile') ? 'active' : '' }}">👤 Profile</a>

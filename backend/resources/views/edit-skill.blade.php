@@ -43,9 +43,12 @@
           </select>
         </label>
 
-        <label>
+        <label class="filter-label">
           <span>Course price (credits)</span>
-          <input type="number" id="skillPrice" min="1" step="1" required />
+          <div class="credit-input-wrapper">
+            <input type="text" id="skillPrice" class="credit-input" placeholder="0" inputmode="numeric" pattern="[0-9]*" autocomplete="off" required />
+            <span class="credit-input-suffix">credits</span>
+          </div>
         </label>
 
         <label>
@@ -129,8 +132,17 @@
           return;
         }
         
+        // Sort categories: alphabetically first, then "other" should always be last
+        const sortedCategories = [...categories].sort((a, b) => {
+          const aName = (a.name || '').toLowerCase();
+          const bName = (b.name || '').toLowerCase();
+          if (aName === 'other') return 1;
+          if (bName === 'other') return -1;
+          return aName.localeCompare(bName); // Alphabetical order for others
+        });
+        
         categorySelect.innerHTML = '<option value="">Select a category</option>' +
-          categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
+          sortedCategories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
       } catch (err) {
         console.error('Error loading categories:', err);
         document.getElementById('skillCategory').innerHTML = '<option value="">Error loading categories</option>';
@@ -264,9 +276,84 @@
       }
     });
 
+    // Integer-only validation function for credit inputs
+    function validateIntegerInput(value) {
+      const cleaned = value.replace(/[^0-9]/g, '');
+      const normalized = cleaned === '' ? '' : String(parseInt(cleaned, 10) || '');
+      return normalized;
+    }
+    
+    // Setup professional credit input for skill price
+    function setupCreditInput(inputId) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      
+      // Integer-only input handling
+      input.addEventListener('input', (e) => {
+        const originalValue = e.target.value;
+        const validatedValue = validateIntegerInput(originalValue);
+        
+        if (originalValue !== validatedValue) {
+          e.target.value = validatedValue;
+        }
+        
+        // Add validation classes
+        const numValue = parseInt(validatedValue, 10);
+        input.classList.remove('valid-input', 'invalid-input');
+        if (validatedValue && numValue >= 1) {
+          input.classList.add('valid-input');
+        } else if (validatedValue && numValue === 0) {
+          input.classList.add('invalid-input');
+        }
+      });
+      
+      // Focus/blur animations
+      input.addEventListener('focus', () => {
+        input.closest('label')?.classList.add('credit-input-focused');
+      });
+      
+      input.addEventListener('blur', () => {
+        input.closest('label')?.classList.remove('credit-input-focused');
+        const value = parseInt(input.value, 10);
+        if (input.value && (!value || value < 1)) {
+          input.value = '';
+          input.classList.remove('valid-input', 'invalid-input');
+        } else if (value >= 1) {
+          input.classList.remove('invalid-input');
+          input.classList.add('valid-input');
+        }
+      });
+      
+      // Prevent invalid characters
+      input.addEventListener('keydown', (e) => {
+        if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+            (e.keyCode === 65 && e.ctrlKey === true) ||
+            (e.keyCode === 67 && e.ctrlKey === true) ||
+            (e.keyCode === 86 && e.ctrlKey === true) ||
+            (e.keyCode === 88 && e.ctrlKey === true) ||
+            (e.keyCode >= 35 && e.keyCode <= 40)) {
+          return;
+        }
+        if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+          e.preventDefault();
+        }
+      });
+      
+      // Format on paste
+      input.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const paste = (e.clipboardData || window.clipboardData).getData('text');
+        const numbers = validateIntegerInput(paste);
+        input.value = numbers;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+
     // Load categories first, then load skill
     loadCategories().then(() => {
       loadSkill();
+      // Setup professional credit input after skill is loaded
+      setupCreditInput('skillPrice');
     });
   </script>
 @endpush
