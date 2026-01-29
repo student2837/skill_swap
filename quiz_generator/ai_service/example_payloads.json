@@ -1,0 +1,211 @@
+{
+  "generate_exam_request": {
+    "course_name": "Introduction to Machine Learning",
+    "teacher_name": "Dr. Jane Smith",
+    "student_name": "John Doe",
+    "learning_outcomes": [
+      "Understand the basic concepts of supervised learning",
+      "Differentiate between classification and regression",
+      "Explain the bias-variance tradeoff",
+      "Apply cross-validation techniques"
+    ],
+    "passing_score": 75.0
+  },
+  "generate_exam_response": {
+    "success": true,
+    "mcqs": [
+      {
+        "id": "q1",
+        "question": "What is the primary goal of supervised learning?",
+        "choices": {
+          "A": "To find patterns in unlabeled data",
+          "B": "To learn from labeled training data to make predictions",
+          "C": "To reduce computational complexity",
+          "D": "To optimize neural network architectures"
+        },
+        "correct_answer": "B",
+        "learning_outcome": "Understand the basic concepts of supervised learning"
+      },
+      {
+        "id": "q2",
+        "question": "Which of the following is a key difference between classification and regression?",
+        "choices": {
+          "A": "Classification uses continuous outputs, regression uses discrete outputs",
+          "B": "Classification predicts discrete labels, regression predicts continuous values",
+          "C": "Classification requires more data than regression",
+          "D": "Regression is always more accurate than classification"
+        },
+        "correct_answer": "B",
+        "learning_outcome": "Differentiate between classification and regression"
+      },
+      {
+        "id": "q3",
+        "question": "The bias-variance tradeoff refers to:",
+        "choices": {
+          "A": "The balance between model complexity and generalization",
+          "B": "The tradeoff between training time and accuracy",
+          "C": "The relationship between data size and model performance",
+          "D": "The choice between different optimization algorithms"
+        },
+        "correct_answer": "A",
+        "learning_outcome": "Explain the bias-variance tradeoff"
+      },
+      {
+        "id": "q4",
+        "question": "What is the main purpose of cross-validation?",
+        "choices": {
+          "A": "To speed up model training",
+          "B": "To assess model performance on unseen data",
+          "C": "To reduce the number of features",
+          "D": "To increase model complexity"
+        },
+        "correct_answer": "B",
+        "learning_outcome": "Apply cross-validation techniques"
+      }
+    ],
+    "total_questions": 4,
+    "message": "Successfully generated 4 questions"
+  },
+  "grade_exam_request": {
+    "course_name": "Introduction to Machine Learning",
+    "teacher_name": "Dr. Jane Smith",
+    "student_name": "John Doe",
+    "learning_outcomes": [
+      "Understand the basic concepts of supervised learning",
+      "Differentiate between classification and regression",
+      "Explain the bias-variance tradeoff",
+      "Apply cross-validation techniques"
+    ],
+    "passing_score": 75.0,
+    "mcqs": [
+      {
+        "id": "q1",
+        "question": "What is the primary goal of supervised learning?",
+        "choices": {
+          "A": "To find patterns in unlabeled data",
+          "B": "To learn from labeled training data to make predictions",
+          "C": "To reduce computational complexity",
+          "D": "To optimize neural network architectures"
+        },
+        "correct_answer": "B",
+        "learning_outcome": "Understand the basic concepts of supervised learning"
+      },
+      {
+        "id": "q2",
+        "question": "Which of the following is a key difference between classification and regression?",
+        "choices": {
+          "A": "Classification uses continuous outputs, regression uses discrete outputs",
+          "B": "Classification predicts discrete labels, regression predicts continuous values",
+          "C": "Classification requires more data than regression",
+          "D": "Regression is always more accurate than classification"
+        },
+        "correct_answer": "B",
+        "learning_outcome": "Differentiate between classification and regression"
+      },
+      {
+        "id": "q3",
+        "question": "The bias-variance tradeoff refers to:",
+        "choices": {
+          "A": "The balance between model complexity and generalization",
+          "B": "The tradeoff between training time and accuracy",
+          "C": "The relationship between data size and model performance",
+          "D": "The choice between different optimization algorithms"
+        },
+        "correct_answer": "A",
+        "learning_outcome": "Explain the bias-variance tradeoff"
+      },
+      {
+        "id": "q4",
+        "question": "What is the main purpose of cross-validation?",
+        "choices": {
+          "A": "To speed up model training",
+          "B": "To assess model performance on unseen data",
+          "C": "To reduce the number of features",
+          "D": "To increase model complexity"
+        },
+        "correct_answer": "B",
+        "learning_outcome": "Apply cross-validation techniques"
+      }
+    ],
+    "student_answers": [
+      {
+        "question_id": "q1",
+        "answer": "B"
+      },
+      {
+        "question_id": "q2",
+        "answer": "B"
+      },
+      {
+        "question_id": "q3",
+        "answer": "A"
+      },
+      {
+        "question_id": "q4",
+        "answer": "B"
+      }
+    ]
+  },
+  "grade_exam_response_success": {
+    "success": true,
+    "raw_score": 4,
+    "percentage": 100.0,
+    "passed": true,
+    "passing_score": 75.0,
+    "total_questions": 4,
+    "grading_report": {
+      "total_questions": 4,
+      "correct_answers": 4,
+      "incorrect_answers": 0,
+      "raw_score": 4,
+      "percentage": 100.0,
+      "passing_score": 75.0,
+      "passed": true,
+      "question_results": [
+        {
+          "question_id": "q1",
+          "question": "What is the primary goal of supervised learning?",
+          "student_answer": "B",
+          "correct_answer": "B",
+          "is_correct": true,
+          "learning_outcome": "Understand the basic concepts of supervised learning"
+        },
+        {
+          "question_id": "q2",
+          "question": "Which of the following is a key difference between classification and regression?",
+          "student_answer": "B",
+          "correct_answer": "B",
+          "is_correct": true,
+          "learning_outcome": "Differentiate between classification and regression"
+        },
+        {
+          "question_id": "q3",
+          "question": "The bias-variance tradeoff refers to:",
+          "student_answer": "A",
+          "correct_answer": "A",
+          "is_correct": true,
+          "learning_outcome": "Explain the bias-variance tradeoff"
+        },
+        {
+          "question_id": "q4",
+          "question": "What is the main purpose of cross-validation?",
+          "student_answer": "B",
+          "correct_answer": "B",
+          "is_correct": true,
+          "learning_outcome": "Apply cross-validation techniques"
+        }
+      ]
+    },
+    "certificate_text": "This is to certify that John Doe has successfully completed the course 'Introduction to Machine Learning' under the instruction of Dr. Jane Smith. The student achieved a score of 100.00% and has demonstrated proficiency in all learning outcomes. Date of completion: December 15, 2024.",
+    "completion_date": "December 15, 2024"
+  },
+  "grade_exam_response_validation_error": {
+    "success": false,
+    "passing_score": 75.0,
+    "total_questions": 4,
+    "validation_errors": [
+      "Missing answers for questions: q3, q4"
+    ],
+    "error": "Validation failed"
+  }
+}

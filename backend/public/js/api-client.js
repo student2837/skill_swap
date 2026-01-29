@@ -640,11 +640,11 @@ class ApiClient {
     /**
      * Mark request as completed (teacher)
      * @param {number} id - Request ID
-     * @returns {Promise<Object>} Updated request
+     * @returns {Promise<Object>} Response with request and quiz_url
      */
     async completeRequest(id) {
         const response = await this.put(`/requests/${id}/complete`);
-        return response.request;
+        return response; // Return full response to access quiz_url
     }
 
     /**
@@ -663,6 +663,15 @@ class ApiClient {
     async getLearningRequests() {
         const response = await this.get('/requests/learning');
         return response.requests;
+    }
+
+    /**
+     * Prepare quiz for a completed request (student). Generates quiz and returns redirect URL.
+     * @param {number} requestId - Request ID
+     * @returns {Promise<{ redirect_url: string }>} Object with redirect_url to quiz exam page
+     */
+    async getQuizAccessRedirect(requestId) {
+        return await this.get(`/quiz/access-request/${requestId}`);
     }
 
     /**

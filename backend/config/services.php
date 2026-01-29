@@ -62,4 +62,18 @@ return [
         'return_url' => env('WHISH_RETURN_URL'),
     ],
 
+    /*
+     |--------------------------------------------------------------------------
+     | AI Quiz / Exam Service
+     |--------------------------------------------------------------------------
+     |
+     | External Python (FastAPI) service that powers AI-generated exams,
+     | grading, and certificate generation.
+     |
+     */
+    'ai_quiz' => [
+        'url' => env('AI_SERVICE_URL', 'http://127.0.0.1:8000'),
+        'timeout' => env('AI_SERVICE_TIMEOUT', 120), // Increased to 120 seconds for generating 20 questions
+    ],
+
 ];

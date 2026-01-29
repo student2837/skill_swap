@@ -182,6 +182,7 @@
 
         displayRequests.forEach(request => {
           const row = document.createElement('tr');
+          const isCompleted = (request.status || '').toLowerCase() === 'completed';
           row.innerHTML = `
             <td>${request.skill?.user?.name || 'Unknown'}</td>
             <td>${request.skill?.title || 'Untitled'}</td>
@@ -191,6 +192,8 @@
             <td class="action-cell">
               ${request.status === 'pending' ? `
                 <button class="btn-small btn-danger" onclick="cancelLearningRequest(${request.id}, this)">Cancel</button>
+              ` : isCompleted ? `
+                <button class="btn-small btn-primary" onclick="takeQuiz(${request.id})">Take Quiz</button>
               ` : '<span style="color: var(--text-muted);">—</span>'}
             </td>
           `;
@@ -225,11 +228,28 @@
 
     async function completeRequest(requestId) {
       try {
-        await apiClient.completeRequest(requestId);
-        alert("Request marked as completed");
+        const response = await apiClient.completeRequest(requestId);
+        // Request is completed - quiz will be generated when student clicks "Take Quiz"
+        alert("Request marked as completed! The student can now take the quiz.");
         loadTeachingRequests();
       } catch (err) {
         alert(err.message || "Failed to complete request");
+      }
+    }
+
+    async function takeQuiz(requestId) {
+      try {
+        // Call API with Bearer token so server knows the student; it generates quiz and returns redirect URL
+        const data = await apiClient.getQuizAccessRedirect(requestId);
+        if (data && data.redirect_url) {
+          window.location.href = data.redirect_url;
+        } else {
+          alert("Error accessing quiz. No redirect URL received.");
+        }
+      } catch (err) {
+        console.error("Error accessing quiz:", err);
+        const msg = (err && err.message) ? err.message : "Error accessing quiz. Please try again.";
+        alert(msg);
       }
     }
 

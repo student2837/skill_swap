@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\QuizController;
 use Illuminate\Support\Facades\Route;
 
 // Public routes
@@ -18,6 +19,34 @@ Route::get('/register', function () {
 Route::get('/browse', function () {
     return view('browse');
 })->name('browse');
+
+// AI-powered quiz routes
+Route::prefix('quiz')->group(function () {
+    // Manual setup route (legacy - kept for backward compatibility)
+    Route::get('/setup', [QuizController::class, 'create'])->name('quiz.setup');
+    
+    // Automatic quiz generation from completed request (must come before generic /generate)
+    Route::get('/generate/request/{requestId}', [QuizController::class, 'generateFromRequest'])
+        ->name('quiz.generate.from_request');
+    
+    // Student access to quiz for their completed request
+    Route::get('/request/{requestId}', [QuizController::class, 'accessQuizForRequest'])
+        ->name('quiz.access.request');
+    
+    Route::post('/generate', [QuizController::class, 'generateExam'])->name('quiz.generate');
+    // Fallback GET route for /generate - redirects to setup
+    Route::get('/generate', function () {
+        return redirect()->route('quiz.setup')->with('status', 'Please use the form to generate an exam.');
+    });
+    
+    Route::get('/exam', [QuizController::class, 'show'])->name('quiz.exam');
+    Route::post('/grade', [QuizController::class, 'gradeExam'])->name('quiz.grade');
+    // Fallback GET route for /grade - redirects to setup
+    Route::get('/grade', function () {
+        return redirect()->route('quiz.setup')->with('status', 'Please take the exam first.');
+    });
+    Route::get('/results', [QuizController::class, 'results'])->name('quiz.results');
+});
 
 // Protected routes (authentication handled client-side via API tokens)
 // Note: These routes don't use auth:sanctum middleware because the frontend

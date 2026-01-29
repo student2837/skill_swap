@@ -238,14 +238,9 @@
         return;
       }
 
-      // Validation: category is required and must be one of the valid values
-      const validCategories = ['music', 'programming', 'design', 'languages', 'other'];
-      if (!category) {
+      // Validation: category is required
+      if (!categoryId || isNaN(categoryId)) {
         alert("Category is required");
-        return;
-      }
-      if (!validCategories.includes(category)) {
-        alert(`Category must be one of: ${validCategories.join(', ')}`);
         return;
       }
 

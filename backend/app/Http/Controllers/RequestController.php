@@ -290,11 +290,17 @@ class RequestController extends Controller
                 return response()->json(['error' => 'Only accepted requests can be marked as completed'], 400);
             }
 
+            // Mark request as completed
             $req->update(['status' => 'completed']);
 
+            // Automatically trigger quiz generation
+            // Note: Quiz generation happens asynchronously via redirect in web flow
+            // For API calls, we return success and the frontend can trigger quiz generation
+            // For web flow, we'll redirect to quiz generation
+
             return response()->json([
-                'message' => 'Request marked as completed',
-                'request' => $req
+                'message' => 'Request marked as completed. Student can now take the quiz.',
+                'request' => $req->fresh(['skill', 'student']),
             ], 200);
 
         }
