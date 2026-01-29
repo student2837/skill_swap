@@ -92,6 +92,14 @@
       apiClient.setToken(token);
     }
 
+    // If quiz is in progress, force return to the exam page.
+    try {
+      if (sessionStorage.getItem('quiz_in_progress') === '1') {
+        alert("You cannot go back until you finish the quiz.");
+        window.location.href = "{{ route('quiz.exam') }}";
+      }
+    } catch (e) {}
+
     // Block admin access - redirect to admin dashboard
     (async function() {
       try {
@@ -183,6 +191,8 @@
         displayRequests.forEach(request => {
           const row = document.createElement('tr');
           const isCompleted = (request.status || '').toLowerCase() === 'completed';
+          const quizCompleted = !!request.quiz_completed_at;
+          const quizStarted = !!request.quiz_started_at && !quizCompleted;
           row.innerHTML = `
             <td>${request.skill?.user?.name || 'Unknown'}</td>
             <td>${request.skill?.title || 'Untitled'}</td>
@@ -193,7 +203,13 @@
               ${request.status === 'pending' ? `
                 <button class="btn-small btn-danger" onclick="cancelLearningRequest(${request.id}, this)">Cancel</button>
               ` : isCompleted ? `
-                <button class="btn-small btn-primary" onclick="takeQuiz(${request.id})">Take Quiz</button>
+                ${quizCompleted ? `
+                  <span style="color: var(--text-muted);">Quiz completed</span>
+                ` : quizStarted ? `
+                  <span style="color: var(--text-muted);">Quiz in progress</span>
+                ` : `
+                  <button class="btn-small btn-primary" onclick="takeQuiz(${request.id})">Take Quiz</button>
+                `}
               ` : '<span style="color: var(--text-muted);">—</span>'}
             </td>
           `;
@@ -238,19 +254,7 @@
     }
 
     async function takeQuiz(requestId) {
-      try {
-        // Call API with Bearer token so server knows the student; it generates quiz and returns redirect URL
-        const data = await apiClient.getQuizAccessRedirect(requestId);
-        if (data && data.redirect_url) {
-          window.location.href = data.redirect_url;
-        } else {
-          alert("Error accessing quiz. No redirect URL received.");
-        }
-      } catch (err) {
-        console.error("Error accessing quiz:", err);
-        const msg = (err && err.message) ? err.message : "Error accessing quiz. Please try again.";
-        alert(msg);
-      }
+      window.location.href = "{{ url('/quiz/start') }}/" + requestId;
     }
 
     async function cancelLearningRequest(requestId, btnEl = null) {

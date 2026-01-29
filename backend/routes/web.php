@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\QuizController;
+use App\Http\Controllers\CertificateController;
 use Illuminate\Support\Facades\Route;
 
 // Public routes
@@ -32,6 +33,14 @@ Route::prefix('quiz')->group(function () {
     // Student access to quiz for their completed request
     Route::get('/request/{requestId}', [QuizController::class, 'accessQuizForRequest'])
         ->name('quiz.access.request');
+
+    // Start quiz flow (warning + loading)
+    Route::get('/start/{requestId}', [QuizController::class, 'startQuizForRequest'])
+        ->name('quiz.start');
+
+    // Certificate view
+    Route::get('/certificate/{certificateId}', [CertificateController::class, 'showPage'])
+        ->name('quiz.certificate');
     
     Route::post('/generate', [QuizController::class, 'generateExam'])->name('quiz.generate');
     // Fallback GET route for /generate - redirects to setup

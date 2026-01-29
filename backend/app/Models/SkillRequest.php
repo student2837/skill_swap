@@ -10,7 +10,11 @@ class SkillRequest extends Model
     use HasFactory;
 
     protected $table='requests';
-    protected $fillable=['student_id','skill_id','status'];
+    protected $fillable=['student_id','skill_id','status','quiz_started_at','quiz_completed_at'];
+    protected $casts = [
+        'quiz_started_at' => 'datetime',
+        'quiz_completed_at' => 'datetime',
+    ];
 
 
     public function student(){

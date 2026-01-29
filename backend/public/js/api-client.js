@@ -59,8 +59,8 @@ class ApiClient {
      * @returns {Promise} Response data
      */
     async request(endpoint, options = {}) {
-        const url = endpoint.startsWith('/') 
-            ? `${this.baseURL}${endpoint}` 
+        const url = endpoint.startsWith('/')
+            ? `${this.baseURL}${endpoint}`
             : `${this.baseURL}/${endpoint}`;
 
         const config = {
@@ -73,14 +73,14 @@ class ApiClient {
 
         try {
             const response = await fetch(url, config);
-            
+
             // Get content type to check if response is JSON
             const contentType = response.headers.get('content-type');
             const isJson = contentType && contentType.includes('application/json');
-            
+
             // Read response body as text first (can only be read once)
             const responseText = await response.text();
-            
+
             // Debug logging (can be removed in production)
             if (!response.ok || !isJson) {
                 console.warn('API Response Debug:', {
@@ -91,7 +91,7 @@ class ApiClient {
                     responsePreview: responseText.substring(0, 200)
                 });
             }
-            
+
             let data;
             // Try to parse as JSON regardless of content-type
             // Sometimes servers send wrong content-type headers
@@ -103,12 +103,12 @@ class ApiClient {
                     if (responseText.trim().startsWith('<')) {
                         // It's HTML - extract error message
                         let errorMessage = 'Server error occurred';
-                        
+
                         // Try to extract error from HTML
-                        const errorMatch = responseText.match(/<title[^>]*>([^<]+)<\/title>/i) || 
-                                          responseText.match(/<h1[^>]*>([^<]+)<\/h1>/i) ||
-                                          responseText.match(/<b[^>]*>([^<]+)<\/b>/i);
-                        
+                        const errorMatch = responseText.match(/<title[^>]*>([^<]+)<\/title>/i) ||
+                            responseText.match(/<h1[^>]*>([^<]+)<\/h1>/i) ||
+                            responseText.match(/<b[^>]*>([^<]+)<\/b>/i);
+
                         if (errorMatch) {
                             errorMessage = errorMatch[1].trim();
                         } else if (responseText.includes('validation')) {
@@ -116,7 +116,7 @@ class ApiClient {
                         } else if (responseText.includes('SQLSTATE') || responseText.includes('database')) {
                             errorMessage = 'Database error occurred';
                         }
-                        
+
                         throw new ApiError(
                             errorMessage,
                             response.status,
@@ -141,10 +141,10 @@ class ApiClient {
                 if (response.status === 401) {
                     // Check if this is a logout request - don't trigger tokenExpired event
                     const isLogoutRequest = endpoint.includes('/logout');
-                    
+
                     // Clear token if it's invalid or expired
                     this.clearToken();
-                    
+
                     // Only dispatch tokenExpired event if it's NOT a logout request
                     // During logout, 401 is expected if token is expired
                     if (!isLogoutRequest && typeof window !== 'undefined') {
@@ -155,19 +155,19 @@ class ApiClient {
                             }
                         }));
                     }
-                    
+
                     // For logout requests, don't throw error - just return
                     if (isLogoutRequest) {
                         return { message: 'Logged out successfully' };
                     }
-                    
+
                     throw new ApiError(
                         data.error || data.message || 'Token expired or invalid. Please log in again.',
                         response.status,
                         { ...data, code: data.code || 'UNAUTHENTICATED' }
                     );
                 }
-                
+
                 // Handle validation errors
                 if (data.errors && typeof data.errors === 'object') {
                     const errorMessages = Object.values(data.errors)
@@ -179,7 +179,7 @@ class ApiClient {
                         data
                     );
                 }
-                
+
                 throw new ApiError(
                     data.error || data.message || 'Request failed',
                     response.status,
@@ -672,6 +672,25 @@ class ApiClient {
      */
     async getQuizAccessRedirect(requestId) {
         return await this.get(`/quiz/access-request/${requestId}`);
+    }
+
+    /**
+     * Get certificates for the current user.
+     * @returns {Promise<Array>} List of certificates
+     */
+    async getCertificates() {
+        const response = await this.get('/certificates');
+        return response.certificates || [];
+    }
+
+    /**
+     * Get a certificate by ID (current user only).
+     * @param {number} id - Certificate ID
+     * @returns {Promise<Object>} Certificate
+     */
+    async getCertificate(id) {
+        const response = await this.get(`/certificates/${id}`);
+        return response.certificate;
     }
 
     /**

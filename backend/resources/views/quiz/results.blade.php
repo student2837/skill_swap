@@ -198,6 +198,30 @@
       justify-content: center;
     }
 
+    /* Hide the top navigation on certificate/results page */
+    .site-header {
+      display: none;
+    }
+
+    .dashboard-btn {
+      background: linear-gradient(120deg, rgba(79, 70, 229, 0.18), rgba(34, 211, 238, 0.18));
+      border: 1px solid rgba(96, 165, 250, 0.45);
+      color: #e2e8f0;
+      padding: 0.7rem 1.35rem;
+      border-radius: 999px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.45);
+      transition: all 0.2s ease;
+    }
+
+    .dashboard-btn:hover {
+      border-color: rgba(96, 165, 250, 0.85);
+      background: linear-gradient(120deg, rgba(79, 70, 229, 0.35), rgba(34, 211, 238, 0.3));
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
     @media print {
       @page {
         size: landscape;
@@ -546,18 +570,27 @@
   <main class="section">
     <div class="container">
       <div class="section-header">
-        <h1 style="font-size: 2.5rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text-main);">
-          Exam Results – {{ $exam['course_name'] ?? 'Course' }}
-        </h1>
-        <div class="exam-meta-info">
-          <div class="meta-item">
-            <span class="meta-label">Student</span>
-            <span class="meta-value">{{ $exam['student_name'] ?? 'N/A' }}</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+          <div>
+            <h1 style="font-size: 2.5rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text-main);">
+              Exam Results – {{ $exam['course_name'] ?? 'Course' }}
+            </h1>
+            <div class="exam-meta-info">
+              <div class="meta-item">
+                <span class="meta-label">Student</span>
+                <span class="meta-value">{{ $exam['student_name'] ?? 'N/A' }}</span>
+              </div>
+              <span class="meta-divider">·</span>
+              <div class="meta-item">
+                <span class="meta-label">Teacher</span>
+                <span class="meta-value">{{ $exam['teacher_name'] ?? 'N/A' }}</span>
+              </div>
+            </div>
           </div>
-          <span class="meta-divider">·</span>
-          <div class="meta-item">
-            <span class="meta-label">Teacher</span>
-            <span class="meta-value">{{ $exam['teacher_name'] ?? 'N/A' }}</span>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <a href="{{ route('dashboard') }}" class="dashboard-btn">
+              Back to Dashboard
+            </a>
           </div>
         </div>
       </div>
@@ -980,6 +1013,33 @@
         printWindow.document.close();
         printWindow.print();
       }
+    </script>
+    <script>
+      // Prevent returning to the quiz after results are shown.
+      history.replaceState(null, document.title, window.location.href);
+      // Add extra entries so back stays on results.
+      for (let i = 0; i < 3; i += 1) {
+        history.pushState(null, document.title, window.location.href);
+      }
+      window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+          window.location.reload();
+        }
+      });
+      window.addEventListener('popstate', () => {
+        history.replaceState(null, document.title, window.location.href);
+        for (let i = 0; i < 3; i += 1) {
+          history.pushState(null, document.title, window.location.href);
+        }
+        alert("Quiz already submitted. You cannot go back.");
+        window.location.replace(window.location.href);
+      });
+    </script>
+    <script>
+      // Clear quiz-in-progress flag once results are shown.
+      try {
+        sessionStorage.removeItem('quiz_in_progress');
+      } catch (e) {}
     </script>
   @endpush
 @endsection

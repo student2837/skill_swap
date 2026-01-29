@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\SkillRequest;
+use App\Models\Certificate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -158,6 +159,13 @@ class QuizController extends Controller
     public function show()
     {
         $exam = session('current_exam');
+        $results = session('exam_results');
+
+        if ($results) {
+            return redirect()
+                ->route('quiz.results')
+                ->with('status', 'Quiz already submitted. You cannot edit your answers.');
+        }
 
         if (! $exam) {
             return redirect()
@@ -165,9 +173,10 @@ class QuizController extends Controller
                 ->with('status', 'Start by configuring a course to generate an exam.');
         }
 
-        return view('quiz.exam', [
+        return response()->view('quiz.exam', [
             'exam' => $exam,
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+          ->header('Pragma', 'no-cache');
     }
 
     /**
@@ -176,6 +185,13 @@ class QuizController extends Controller
     public function gradeExam(Request $request)
     {
         $exam = session('current_exam');
+        $results = session('exam_results');
+
+        if ($results) {
+            return redirect()
+                ->route('quiz.results')
+                ->with('status', 'Quiz already submitted. You cannot edit your answers.');
+        }
 
         if (! $exam) {
             return redirect()
@@ -258,6 +274,35 @@ class QuizController extends Controller
                 ->withErrors(['ai' => 'Grading service returned an invalid response.']);
         }
 
+        if (!empty($exam['request_id'])) {
+            SkillRequest::where('id', $exam['request_id'])
+                ->update(['quiz_completed_at' => now()]);
+        }
+
+        $passed = $results['passed'] ?? ($results['pass'] ?? false);
+        if (!empty($exam['request_id']) && $passed) {
+            $request = SkillRequest::with(['skill.user', 'student'])->find($exam['request_id']);
+            if ($request && $request->student && $request->skill && $request->skill->user) {
+                Certificate::firstOrCreate(
+                    ['request_id' => $request->id],
+                    [
+                        'skill_id' => $request->skill->id,
+                        'student_id' => $request->student->id,
+                        'teacher_id' => $request->skill->user->id,
+                        'course_name' => $request->skill->title,
+                        'teacher_name' => $request->skill->user->name,
+                        'student_name' => $request->student->name,
+                        'certificate_code' => strtoupper(substr(md5($request->id . $request->student->id . now()), 0, 12)),
+                        'score' => $results['raw_score'] ?? null,
+                        'percentage' => $results['percentage'] ?? null,
+                        'passed' => true,
+                        'certificate_text' => $results['certificate_text'] ?? null,
+                        'completion_date' => now()->toDateString(),
+                    ]
+                );
+            }
+        }
+
         session(['exam_results' => $results]);
 
         return redirect()->route('quiz.results');
@@ -277,10 +322,11 @@ class QuizController extends Controller
                 ->with('status', 'No exam results found. Generate and complete an exam first.');
         }
 
-        return view('quiz.results', [
+        return response()->view('quiz.results', [
             'exam' => $exam,
             'results' => $results,
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+          ->header('Pragma', 'no-cache');
     }
 
     /**
@@ -298,6 +344,14 @@ class QuizController extends Controller
 
         if ($request->status !== 'completed') {
             throw new \Exception('Quiz can only be generated for completed courses.');
+        }
+
+        if ($request->quiz_completed_at) {
+            throw new \Exception('Quiz already completed. You cannot retake it.');
+        }
+
+        if ($request->quiz_started_at) {
+            throw new \Exception('Quiz already started. Please finish the quiz.');
         }
 
         $skill = $request->skill;
@@ -370,6 +424,8 @@ class QuizController extends Controller
             $formattedQuestions[] = is_array($q) ? $q : (array) $q;
         }
 
+        $request->update(['quiz_started_at' => now()]);
+
         $exam = [
             'request_id' => $requestId,
             'course_name' => $skill->title,
@@ -425,6 +481,14 @@ class QuizController extends Controller
 
             if ($request->status !== 'completed') {
                 return response()->json(['error' => 'Quiz is only available for completed courses.'], 400);
+            }
+
+            if ($request->quiz_completed_at) {
+                return response()->json(['error' => 'Quiz already completed. You cannot retake it.'], 400);
+            }
+
+            if ($request->quiz_started_at) {
+                return response()->json(['error' => 'Quiz already started. Please finish the quiz.'], 400);
             }
 
             $currentUserId = Auth::id();
@@ -485,6 +549,18 @@ class QuizController extends Controller
                     ->with('error', 'You can only access quizzes for your own completed courses.');
             }
 
+            if ($request->quiz_completed_at) {
+                return redirect()
+                    ->route('requests')
+                    ->with('error', 'Quiz already completed. You cannot retake it.');
+            }
+
+            if ($request->quiz_started_at) {
+                return redirect()
+                    ->route('requests')
+                    ->with('error', 'Quiz already started. Please finish the quiz.');
+            }
+
             // Check if there's already a quiz in session for this request
             $currentExam = session('current_exam');
             if ($currentExam && isset($currentExam['request_id']) && $currentExam['request_id'] == $requestId) {
@@ -511,6 +587,16 @@ class QuizController extends Controller
                 ->route('requests')
                 ->with('error', 'An error occurred while accessing the quiz. Please try again.');
         }
+    }
+
+    /**
+     * Show warning + loading screen before starting the quiz.
+     */
+    public function startQuizForRequest($requestId)
+    {
+        return view('quiz.start', [
+            'requestId' => (int) $requestId,
+        ]);
     }
 }
 

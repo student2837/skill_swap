@@ -10,7 +10,7 @@
     }
     /* Browse skill cards styling */
     #browseSkillsGrid {
-      grid-template-columns: repeat(auto-fill, minmax(240px, 260px)) !important;
+      grid-template-columns: repeat(3, minmax(240px, 1fr)) !important;
     }
     #browseSkillsGrid .skill-card {
       padding: 0.9rem 1rem !important;

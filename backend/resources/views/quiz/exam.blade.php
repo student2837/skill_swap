@@ -199,6 +199,10 @@
       margin-bottom: 0.25rem;
     }
 
+    .site-header {
+      display: none;
+    }
+
     @media (max-width: 768px) {
       .choices-container {
         margin-left: 0;
@@ -322,5 +326,30 @@
       </form>
     </div>
   </main>
+  @push('scripts')
+    <script>
+      // Mark quiz as in-progress for back-navigation guards.
+      try {
+        sessionStorage.setItem('quiz_in_progress', '1');
+      } catch (e) {}
+
+      // If this page was restored from back/forward cache, force reload
+      // so server-side guards can redirect to results.
+      window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+          window.location.reload();
+        }
+      });
+
+      // Replace current entry, then lock back navigation.
+      history.replaceState(null, document.title, window.location.href);
+      history.pushState(null, document.title, window.location.href);
+      window.addEventListener('popstate', () => {
+        history.replaceState(null, document.title, window.location.href);
+        history.pushState(null, document.title, window.location.href);
+        alert("You cannot go back until you finish the quiz.");
+      });
+    </script>
+  @endpush
 @endsection
 

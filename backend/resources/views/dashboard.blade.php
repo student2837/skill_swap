@@ -110,6 +110,20 @@
         </table>
       </div>
     </section>
+
+    <!-- Certificates History -->
+    <section class="certificates-section">
+      <div class="dash-card glass">
+        <div class="dash-card-header">
+          <h3>Your certificates</h3>
+          <button class="btn-small" type="button" onclick="loadCertificates()">Refresh</button>
+        </div>
+
+        <div class="certificates-grid" id="certificatesGrid">
+          <p class="muted">No certificates yet.</p>
+        </div>
+      </div>
+    </section>
   </main>
 @endsection
 
@@ -327,6 +341,52 @@
       }
     }
 
+    async function loadCertificates() {
+      const grid = document.getElementById("certificatesGrid");
+      if (!grid) return;
+      grid.innerHTML = "<p class='muted'>Loading certificates...</p>";
+
+      try {
+        const certificates = await apiClient.getCertificates();
+        if (!certificates || !certificates.length) {
+          grid.innerHTML = "<p class='muted'>No certificates yet.</p>";
+          return;
+        }
+
+        grid.innerHTML = certificates.map(cert => `
+          <div class="certificate-card glass">
+            <div class="certificate-card-header">
+              <div>
+                <p class="certificate-title">${cert.course_name || 'Course'}</p>
+                <p class="certificate-meta">Teacher: ${cert.teacher_name || 'N/A'}</p>
+              </div>
+              <span class="certificate-chip">Certified</span>
+            </div>
+            <div class="certificate-details">
+              <div>
+                <span class="certificate-label">Score</span>
+                <span class="certificate-value">${cert.percentage != null ? Number(cert.percentage).toFixed(2) + '%' : 'N/A'}</span>
+              </div>
+              <div>
+                <span class="certificate-label">Date</span>
+                <span class="certificate-value">${cert.completion_date || 'N/A'}</span>
+              </div>
+              <div>
+                <span class="certificate-label">ID</span>
+                <span class="certificate-value">${cert.certificate_code || '—'}</span>
+              </div>
+            </div>
+            <div class="certificate-actions">
+              <a class="btn-small" href="${cert.view_url}">View Certificate</a>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error("Error loading certificates:", err);
+        grid.innerHTML = "<p class='muted'>Error loading certificates.</p>";
+      }
+    }
+
     // Load all data
     async function loadAllData() {
       await loadUser();
@@ -335,6 +395,7 @@
       await loadRequests();
       await loadTeachingRequestsCount();
       await loadTeachingRequests();
+      await loadCertificates();
     }
 
     // Listen for storage events (when credits are updated from credits page in another tab)

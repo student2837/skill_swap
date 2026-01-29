@@ -14,6 +14,7 @@ use App\Http\Controllers\PayoutMethodController;
 use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\DepositController;
 use App\Http\Controllers\QuizController;
+use App\Http\Controllers\CertificateController;
 
 
 
@@ -54,7 +55,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/requests/purge-cancelled/learning', [RequestController::class, 'purgeCancelledLearningRequests']);
 
     // Student: prepare quiz for completed request (returns redirect_url to quiz exam page)
-    Route::get('/quiz/access-request/{requestId}', [QuizController::class, 'accessQuizForRequestApi']);
+    // Use web middleware so session persists for the exam page.
+    Route::get('/quiz/access-request/{requestId}', [QuizController::class, 'accessQuizForRequestApi'])
+        ->middleware('web');
+
+    // Certificates
+    Route::get('/certificates', [CertificateController::class, 'index']);
+    Route::get('/certificates/{certificateId}', [CertificateController::class, 'show']);
 
     // Extra: teacher/student skill views
     Route::get('/user/teaching-skills', [UserController::class, 'getTeachingSkills']);
