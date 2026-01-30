@@ -4,6 +4,23 @@
 
 @push('styles')
   <link rel="stylesheet" href="{{ asset('css/dashboard.css') }}" />
+  <style>
+    #allReviewsList .muted {
+      color: #e2e8f0;
+      opacity: 0.9;
+    }
+    #allReviewsList.is-empty {
+      min-height: 120px;
+      padding: 1rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #allReviewsList.is-empty .muted {
+      text-align: center;
+      width: 100%;
+    }
+  </style>
 @endpush
 
 @section('content')
@@ -265,9 +282,11 @@
         const reviews = await apiClient.getReviewsForUser(me.id);
 
         if (!reviews || !reviews.length) {
+          container.classList.add('is-empty');
           container.innerHTML = "<p class='muted'>No reviews yet.</p>";
           return;
         }
+        container.classList.remove('is-empty');
 
         container.innerHTML = reviews.map(r => {
           const skillTitle = r.request?.skill?.title || 'Skill';
